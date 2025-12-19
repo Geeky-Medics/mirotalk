@@ -24,8 +24,9 @@ jobs:
 
       - name: Merge upstream into fork default branch
         run: |
-          BRANCH="${GITHUB_REF_NAME:-master}"
+          BRANCH="master"
           git checkout "$BRANCH"
+
           git merge --no-edit upstream/master || git merge --no-edit upstream/main
 
       - name: Push changes
