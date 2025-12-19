@@ -2,7 +2,7 @@ name: Sync upstream
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # every 6 hours
+    - cron: "0 */6 * * *" # every 6 hours
   workflow_dispatch:
 
 permissions:
@@ -11,6 +11,7 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout fork
         uses: actions/checkout@v4
@@ -27,7 +28,10 @@ jobs:
           BRANCH="master"
           git checkout "$BRANCH"
 
-          git merge --no-edit upstream/master || git merge --no-edit upstream/main
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git merge --no-edit upstream/master || git merge --no-edit upstream/main || exit 1
 
       - name: Push changes
         run: |
