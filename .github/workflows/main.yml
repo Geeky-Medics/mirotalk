@@ -1,0 +1,33 @@
+name: Sync upstream
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"   # every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream
+        run: |
+          git remote add upstream https://github.com/miroslavpejic85/mirotalk.git || true
+          git fetch upstream --prune
+
+      - name: Merge upstream into fork default branch
+        run: |
+          BRANCH="${GITHUB_REF_NAME:-master}"
+          git checkout "$BRANCH"
+          git merge --no-edit upstream/master || git merge --no-edit upstream/main
+
+      - name: Push changes
+        run: |
+          git push origin HEAD
