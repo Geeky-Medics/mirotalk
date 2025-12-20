@@ -15,7 +15,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.6.89
+ * @version 1.6.91
  *
  */
 
@@ -11834,6 +11834,23 @@ function whiteboardAddObj(type) {
     }
 }
 
+/**
+ * Whiteboard delte object
+ */
+function whiteboardDeleteObject() {
+    const obj = wbCanvas?.getActiveObject?.();
+    if (!obj) return;
+    // Ignore if typing in input (unless editing Fabric text)
+    const tag = document.activeElement?.tagName;
+    if ((tag === 'INPUT' || tag === 'TEXTAREA') && !obj.isEditing) return;
+    if (obj.isEditing && obj.exitEditing) obj.exitEditing();
+    whiteboardEraseObject();
+    return;
+}
+
+/**
+ * Whiteboard erase object
+ */
 function whiteboardEraseObject() {
     if (wbCanvas && typeof wbCanvas.getActiveObjects === 'function') {
         const activeObjects = wbCanvas.getActiveObjects();
@@ -11849,6 +11866,9 @@ function whiteboardEraseObject() {
     }
 }
 
+/**
+ * Whoteboard clone object
+ */
 function whiteboardCloneObject() {
     if (wbCanvas && typeof wbCanvas.getActiveObjects === 'function') {
         const activeObjects = wbCanvas.getActiveObjects();
@@ -11871,6 +11891,9 @@ function whiteboardCloneObject() {
     }
 }
 
+/**
+ * Whiteboard vanishong objects
+ */
 function wbHandleVanishingObjects() {
     if (wbIsVanishing && wbCanvas._objects.length > 0) {
         const obj = wbCanvas._objects[wbCanvas._objects.length - 1];
@@ -11898,6 +11921,9 @@ function wbHandleVanishingObjects() {
     }
 }
 
+/**
+ * Whoteboard create sticky note
+ */
 function createStickyNote() {
     Swal.fire({
         background: swBg,
@@ -12629,6 +12655,12 @@ function setupWhiteboardShortcuts() {
             ((event.key === 'y' || event.key === 'Y') && (event.ctrlKey || event.metaKey))
         ) {
             whiteboardAction(getWhiteboardAction('redo'));
+            event.preventDefault();
+            return;
+        }
+        // Whiteboard delete shortcut: Delete / Backspace
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+            whiteboardDeleteObject();
             event.preventDefault();
             return;
         }
@@ -13500,7 +13532,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.6.89',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.6.91',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: `
