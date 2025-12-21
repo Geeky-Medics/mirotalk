@@ -15,7 +15,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.6.93
+ * @version 1.6.95
  *
  */
 
@@ -719,7 +719,7 @@ let surveyURL = 'https://www.questionpro.com/t/AUs7VZq00L';
 let redirectActive = false;
 let redirectURL = '/newcall';
 
-let needToCreateOffer = false;
+let needToCreateOfferByPeer = {};
 
 // GeoLocation
 const notificationService = new NotificationService({ Swal, swBg, images, playSound });
@@ -2298,7 +2298,8 @@ async function handleAddPeer(config) {
 
     const peer_name = peers[peer_id]['peer_name'];
     const peer_video = peers[peer_id]['peer_video'];
-    const peer_screen = peers[peer_id]['peer_screen_status'];
+    const peer_video_status = peers[peer_id]['peer_video_status'];
+    const peer_screen_status = peers[peer_id]['peer_screen_status'];
 
     if (peer_id in peerConnections) {
         // This could happen if the user joins multiple channels where the other peer is also in.
@@ -2340,8 +2341,8 @@ async function handleAddPeer(config) {
     await handleRTCDataChannels(peer_id);
     await handleOnTrack(peer_id, peers);
 
-    if ((!peer_video || !peer_screen) && !needToCreateOffer) {
-        needToCreateOffer = true;
+    if ((!peer_video_status || !peer_screen_status) && !needToCreateOfferByPeer[peer_id]) {
+        needToCreateOfferByPeer[peer_id] = true;
     }
     if (should_create_offer) {
         await handleRtcOffer(peer_id);
@@ -2355,8 +2356,8 @@ async function handleAddPeer(config) {
     // Add tracks (this will trigger onnegotiationneeded if needed)
     await handleAddTracks(peer_id);
 
-    // Create camera tile for peer without camera to show their avatar
-    if (!peer_video) {
+    // Create camera tile for peer without camera to show their avatar or has screen sharing on but camera off
+    if (!peer_video || (peer_screen_status && !peer_video_status)) {
         await loadRemoteMediaStream(new MediaStream(), peers, peer_id, 'video');
     }
 
@@ -2504,15 +2505,22 @@ async function handleOnTrack(peer_id, peers) {
 
         // Video or screen track
         if (kind === 'video') {
+            // Determine if the incoming video track is a screen share or camera.
             const extras = peerInfo.extras || {};
             const label = event.track.label || '';
+            const settings = event?.track?.getSettings() || {};
 
-            // Classify as screen or camera
-            const isScreen =
-                extras.screen_track_id === event.track.id ||
-                extras.screen_stream_id === inbound.id ||
-                /screen|window|monitor|display/i.test(label) ||
-                (peerInfo.peer_screen_status && !peerInfo.peer_video_status);
+            const isDisplayCapture =
+                !!settings.displaySurface || settings.mediaSource === 'screen' || settings.displaySurface === 'monitor';
+
+            const isScreenByExtras =
+                extras.screen_track_id === event.track.id || extras.screen_stream_id === inbound.id;
+
+            const isScreenByLabel = /screen|window|monitor|display/i.test(label);
+
+            const isScreenByStatus = peerInfo.peer_screen_status && !peerInfo.peer_video_status;
+
+            const isScreen = isDisplayCapture || isScreenByExtras || isScreenByLabel || isScreenByStatus;
 
             handleStream(isScreen ? 'screen' : 'video', isScreen ? 'screen' : 'video');
         }
@@ -2709,8 +2717,8 @@ function handleSessionDescription(config) {
                                 console.log('Answer setLocalDescription done!');
 
                                 // https://github.com/miroslavpejic85/mirotalk/issues/110
-                                if (needToCreateOffer) {
-                                    needToCreateOffer = false;
+                                if (needToCreateOfferByPeer[peer_id]) {
+                                    needToCreateOfferByPeer[peer_id] = false;
                                     handleRtcOffer(peer_id);
                                     console.log('[RTCSessionDescription] - NEED TO CREATE OFFER', {
                                         peer_id: peer_id,
@@ -4270,7 +4278,7 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
             // refresh remote peers hand icon status and title
             setPeerHandStatus(peer_id, peer_name, peer_hand_status);
             // refresh remote peers video icon status and title
-            setPeerVideoStatus(peer_id, peer_screen_status ? peer_screen_status : peer_video_status);
+            setPeerVideoStatus(peer_id, peer_video_status);
             // refresh remote peers audio icon status and title
             setPeerAudioStatus(peer_id, peer_audio_status);
             // handle remote peers audio on-off
@@ -13532,7 +13540,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.6.93',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.6.95',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: `
