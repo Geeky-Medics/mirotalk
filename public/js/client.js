@@ -15,7 +15,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.7.05
+ * @version 1.7.08
  *
  */
 
@@ -1329,11 +1329,7 @@ async function handleConnect() {
     await getButtons();
 
     // If reconnecting, force rejoin to properly sync with other peers
-    if (isPeerReconnected && localVideoMediaStream && localAudioMediaStream) {
-        console.log('Reconnected - rejoining channel');
-        await joinToChannel();
-        isPeerReconnected = false; // Reset flag after successful rejoin
-    } else if (localVideoMediaStream && localAudioMediaStream) {
+    if (localVideoMediaStream && localAudioMediaStream) {
         await joinToChannel();
     } else {
         await initEnumerateDevices();
@@ -2323,16 +2319,8 @@ async function handleAddPeer(config) {
 
     if (peer_id in peerConnections) {
         // This could happen if the user joins multiple channels where the other peer is also in.
-        // Or when a peer reconnects - close the old connection and create a new one
-        console.log('Already connected to peer', peer_id, '- closing old connection and creating new one');
-        try {
-            peerConnections[peer_id].close();
-            delete peerConnections[peer_id];
-            delete chatDataChannels[peer_id];
-            delete fileDataChannels[peer_id];
-        } catch (err) {
-            console.error('Error closing stale peer connection', err);
-        }
+        console.log('Already connected to peer', peer_id);
+        return;
     }
 
     console.log('iceServers', iceServers[0]);
@@ -4516,7 +4504,11 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
             remoteAudioMedia.volume = 1.0;
             remoteAudioMedia.autoplay = true;
             remoteAudioMedia.controls = false;
-            remoteAudioMedia.muted = false;
+
+            if (!hasAudioTrack(stream)) {
+                remoteAudioMedia.muted = true;
+            }
+
             remoteAudioWrap.appendChild(remoteAudioMedia);
             audioMediaContainer.appendChild(remoteAudioWrap);
             attachMediaStream(remoteAudioMedia, stream);
@@ -7980,7 +7972,22 @@ async function toggleScreenSharing(init = false) {
                     peerInfo.extras = {};
                 } catch (_) {}
                 await emitPeerStatus('screen', false, {});
-                await refreshMyStreamToPeers(undefined, true);
+
+                // Ensure mic audio is restored
+                let micTrack = getAudioTrack(localAudioMediaStream);
+                if (!micTrack || micTrack.readyState === 'ended') {
+                    try {
+                        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        localAudioMediaStream = micStream;
+                        micTrack = getAudioTrack(localAudioMediaStream);
+                        console.log('Reacquired microphone after screen share stop');
+                    } catch (err) {
+                        console.error('Failed to reacquire microphone after screen share stop:', err);
+                    }
+                } else {
+                    micTrack.enabled = true;
+                }
+                await refreshMyStreamToPeers(localAudioMediaStream, true);
 
                 // Screen reader announcement for stopping screen share
                 screenReaderAccessibility.announceMessage('Screen sharing stopped');
@@ -8188,16 +8195,15 @@ async function refreshMyStreamToPeers(stream, localAudioTrackChange = false) {
 
     // Determine which audio track to use.
     // While screen sharing, prefer the screen-share audio track (which may be mixed screen+mic).
-    const screenAudioTrack =
-        isScreenStreaming && hasAudioTrack(localScreenMediaStream) ? getAudioTrack(localScreenMediaStream) : null;
-
-    const micCandidate =
-        stream && hasAudioTrack(stream) && localAudioTrackChange
-            ? getAudioTrack(stream)
-            : getAudioTrack(localAudioMediaStream);
-
-    const audioTrack = screenAudioTrack || micCandidate;
-    const audioStream = screenAudioTrack ? localScreenMediaStream : localAudioMediaStream;
+    // Always prefer mic audio when not screen sharing
+    let audioTrack, audioStream;
+    if (isScreenStreaming && hasAudioTrack(localScreenMediaStream)) {
+        audioTrack = getAudioTrack(localScreenMediaStream);
+        audioStream = localScreenMediaStream;
+    } else {
+        audioTrack = getAudioTrack(localAudioMediaStream);
+        audioStream = localAudioMediaStream;
+    }
 
     // Push tracks to every peer
     for (const peer_id in peerConnections) {
@@ -8219,10 +8225,7 @@ async function refreshMyStreamToPeers(stream, localAudioTrackChange = false) {
                 console.log('ADD CAMERA TRACK TO', { peer_id, peer_name, cameraTrack });
             }
         } else {
-            // No camera track: if there's a camera sender (but no screen or screen is at index 0), handle cleanup
-            // Note: We keep video senders if screen exists; this branch handles pure camera removal
             if (videoSenders.length >= 1 && !screenTrack) {
-                // Only remove the first sender if there's no screen to take its place
                 try {
                     await videoSenders[0].replaceTrack(null);
                     console.log('REMOVE CAMERA TRACK FROM', { peer_id, peer_name });
@@ -8243,7 +8246,6 @@ async function refreshMyStreamToPeers(stream, localAudioTrackChange = false) {
                 console.log('ADD SCREEN TRACK TO', { peer_id, peer_name, screenTrack });
             }
         } else {
-            // No screen track: if there are 2 video senders, remove the second one
             if (videoSenders.length >= 2) {
                 try {
                     pc.removeTrack(videoSenders[1]);
@@ -13594,7 +13596,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.7.05',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.7.08',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: `
