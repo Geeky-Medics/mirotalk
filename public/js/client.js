@@ -489,9 +489,10 @@ const ZOOM_IN_OUT_ENABLED = true; // Video Zoom in/out default (true)
 
 // Color Picker:
 
+const keepCustomTheme = getId('keepCustomTheme');
+
 const themeCustom = {
     input: getId('themeColorPicker'),
-    check: getId('keepCustomTheme'),
     color: lsSettings.theme_color ? lsSettings.theme_color : '#000000',
     keep: lsSettings.theme_custom ? lsSettings.theme_custom : false,
 };
@@ -534,7 +535,6 @@ const pickr = Pickr.create({
     .on('changestop', () => {
         lsSettings.theme_color = themeCustom.color;
         lS.setSettings(lsSettings);
-        setTheme();
     });
 
 // Room
@@ -6542,7 +6542,7 @@ function setMySettingsBtn() {
         resumeRecording();
     });
     // Styles
-    themeCustom.check.onchange = (e) => {
+    keepCustomTheme.onchange = (e) => {
         themeCustom.keep = e.currentTarget.checked;
         themeSelect.disabled = themeCustom.keep;
         lsSettings.theme_custom = themeCustom.keep;
@@ -7013,7 +7013,7 @@ function loadSettingsFromLocalStorage() {
     switchKeepButtonsVisible.checked = isKeepButtonsVisible;
     switchAudioPitchBar.checked = isAudioPitchBar;
     switchShortcuts.checked = isShortcutsEnabled;
-    themeCustom.check.checked = themeCustom.keep;
+    keepCustomTheme.checked = themeCustom.keep;
     themeSelect.disabled = themeCustom.keep;
     themeCustom.input.value = themeCustom.color;
 
