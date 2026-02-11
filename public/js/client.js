@@ -15,7 +15,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.7.27
+ * @version 1.7.29
  *
  */
 
@@ -3678,7 +3678,7 @@ async function loadLocalMedia(stream, kind) {
 
             // my peer name
             myVideoPeerName.setAttribute('id', 'myVideoPeerName');
-            myVideoPeerName.className = 'videoPeerName notranslate';
+            myVideoPeerName.className = 'videoPeerName notranslate fadein';
 
             // my hand status element
             myHandStatusIcon.setAttribute('id', 'myHandStatusIcon');
@@ -3887,7 +3887,7 @@ async function loadLocalMedia(stream, kind) {
 
             // my screen peer name
             myScreenPeerName.setAttribute('id', 'myScreenPeerName');
-            myScreenPeerName.className = 'videoPeerName notranslate';
+            myScreenPeerName.className = 'videoPeerName notranslate fadein';
             myScreenPeerName.innerText = myPeerName + ' (me)';
 
             // my screen to image
@@ -4120,7 +4120,7 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
 
             // remote peer name element
             remotePeerName.setAttribute('id', peer_id + '_name');
-            remotePeerName.className = 'videoPeerName';
+            remotePeerName.className = 'videoPeerName notranslate fadein';
 
             const peerVideoText = document.createTextNode(peer_name);
             remotePeerName.appendChild(peerVideoText);
@@ -4427,7 +4427,7 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
 
             // IDs and classes
             remoteScreenPeerName.setAttribute('id', peer_id + '_screen_name');
-            remoteScreenPeerName.className = 'videoPeerName';
+            remoteScreenPeerName.className = 'videoPeerName notranslate fadein';
             remoteScreenPeerName.appendChild(document.createTextNode(peer_name + ' (screen)'));
 
             remoteScreenPrivateMsgBtn.setAttribute('id', peer_id + '_screen_privateMsg');
@@ -7495,6 +7495,7 @@ function showButtonsBarAndMenu() {
     )
         return;
     toggleClassElements('navbar', 'block');
+    toggleClassElements('videoPeerName', 'flex');
     elemDisplay(bottomButtons, true, 'flex');
     isButtonsVisible = true;
 }
@@ -7505,11 +7506,13 @@ function showButtonsBarAndMenu() {
 function checkButtonsBarAndMenu() {
     if (lsSettings.keep_buttons_visible) {
         toggleClassElements('navbar', 'block');
+        toggleClassElements('videoPeerName', 'flex');
         elemDisplay(bottomButtons, true, 'flex');
         isButtonsVisible = true;
     } else {
         if (!isButtonsBarOver) {
             toggleClassElements('navbar', 'none');
+            toggleClassElements('videoPeerName', 'none');
             elemDisplay(bottomButtons, false);
             isButtonsVisible = false;
         }
@@ -7593,7 +7596,7 @@ function shareRoomMeetingURL(checkScreen = false) {
 function makeRoomQR() {
     const qr = new QRious({
         element: getId('qrRoom'),
-        value: window.location.href,
+        value: myRoomUrl,
     });
     qr.set({
         size: 256,
@@ -7606,7 +7609,7 @@ function makeRoomQR() {
 function makeRoomPopupQR() {
     const qr = new QRious({
         element: document.getElementById('qrRoomPopup'),
-        value: window.location.href,
+        value: myRoomUrl,
     });
     qr.set({
         size: 256,
@@ -13657,7 +13660,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.7.27',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.7.29',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: `
