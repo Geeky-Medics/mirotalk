@@ -27,8 +27,9 @@ jobs:
         run: npm test
 
   build:
+    if: github.repository == 'miroslavpejic85/mirotalk'
     runs-on: ubuntu-22.04 # LTS
-    needs: test  # This ensures the build job only runs if the test job succeeds
+    needs: test
     steps:
       - name: Checkout
         uses: actions/checkout@v3
