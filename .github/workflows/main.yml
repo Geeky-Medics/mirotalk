@@ -13,26 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout fork
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Add upstream
-        run: |
-          git remote add upstream https://github.com/miroslavpejic85/mirotalk.git || true
-          git fetch upstream --prune
-
-      - name: Merge upstream into fork default branch
-        run: |
-          BRANCH="master"
-          git checkout "$BRANCH"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git merge --no-edit upstream/master || git merge --no-edit upstream/main || exit 1
-
-      - name: Push changes
-        run: |
-          git push origin HEAD
+      - name: Sync fork with upstream
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh repo sync ${{ github.repository }} --force
