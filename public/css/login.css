@@ -15,6 +15,11 @@
     text-align: center;
 }
 
+/* Join Room Section hidden by default */
+#joinRoomForm {
+    display: none;
+}
+
 /* Ensure joinRoomForm is fully visible (not affected by ScrollReveal) */
 #joinRoomForm.login-card {
     opacity: 1 !important;
@@ -209,6 +214,24 @@
         background-color 0.2s ease;
 }
 .login-card .random-room-btn:hover {
+    border-color: rgba(70, 120, 249, 0.4);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.login-card .share-room-btn {
+    padding: 0 14px;
+    font-size: 16px;
+    color: #f9faff;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        border-color 0.2s ease,
+        background-color 0.2s ease;
+}
+.login-card .share-room-btn:hover {
     border-color: rgba(70, 120, 249, 0.4);
     background-color: rgba(255, 255, 255, 0.1);
 }
