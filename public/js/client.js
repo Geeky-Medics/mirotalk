@@ -231,6 +231,7 @@ const msgerDropDownMenuBtn = getId('msgerDropDownMenuBtn');
 const msgerDropDownContent = getId('msgerDropDownContent');
 const msgerSidebarDropDownMenuBtn = getId('msgerSidebarDropDownMenuBtn');
 const msgerSidebarDropDownContent = getId('msgerSidebarDropDownContent');
+
 const msgerClean = getId('msgerClean');
 const msgerSaveBtn = getId('msgerSaveBtn');
 const msgerRoomChatItem = getId('msgerRoomChatItem');
@@ -315,6 +316,9 @@ const msgerParticipantsList = getId('msgerParticipantsList');
 const searchPeerBarName = getId('searchPeerBarName');
 const msgerCPDropDownMenuBtn = getId('msgerCPDropDownMenuBtn');
 const msgerCPDropDownContent = getId('msgerCPDropDownContent');
+
+renderMsgerRoomActionsDropdown(msgerCPDropDownContent);
+renderMsgerRoomActionsDropdown(msgerSidebarDropDownContent, 'Desktop');
 
 // Caption section
 const captionDraggable = getId('captionDraggable');
@@ -6079,10 +6083,7 @@ function setParticipantsBtn() {
                 chatPin();
             }
 
-            msgerDraggable.classList.add('msger-pinned-sidebar-open');
-            msgerCPBtn.classList.add('active');
-            searchPeerBarName?.focus();
-            screenReaderAccessibility.announceMessage('Pinned chat participants opened');
+            openPinnedParticipantsSidebar(true);
             return;
         }
 
@@ -6090,6 +6091,20 @@ function setParticipantsBtn() {
         searchPeerBarName?.focus();
         screenReaderAccessibility.announceMessage('Participants list opened');
     });
+}
+
+function openPinnedParticipantsSidebar(announce = false) {
+    if (!isChatPinned) {
+        return;
+    }
+
+    msgerDraggable.classList.add('msger-pinned-sidebar-open');
+    msgerCPBtn.classList.add('active');
+    searchPeerBarName?.focus();
+
+    if (announce) {
+        screenReaderAccessibility.announceMessage('Pinned chat participants opened');
+    }
 }
 
 /**
@@ -9860,6 +9875,10 @@ function handleDataChannelChat(dataMessage) {
     if (msgPrivate) {
         if (!isConversationCurrentlyVisible('private', msgFrom, msgFromId)) {
             addUnreadMessage('private', msgFromId);
+
+            if (isChatRoomVisible && isChatPinned) {
+                openPinnedParticipantsSidebar();
+            }
         }
     } else if (!isConversationCurrentlyVisible('public')) {
         addUnreadMessage('public');
@@ -10579,6 +10598,26 @@ function getMsgerParticipantDropdownActionMarkup(buttonId, iconClass, label, var
             </button>
         </li>
     `;
+}
+
+function getMsgerParticipantDropdownDividerMarkup() {
+    return `<li class="msger-dropdown-divider" aria-hidden="true"></li>`;
+}
+
+function getMsgerRoomActionsDropdownMarkup(idSuffix = '') {
+    return `
+        ${getMsgerParticipantDropdownActionMarkup(`captionEveryoneBtn${idSuffix}`, 'fas fa-play', 'Start captions')}
+        ${getMsgerParticipantDropdownActionMarkup(`captionEveryoneStopBtn${idSuffix}`, 'fas fa-stop', 'Stop captions')}
+        ${getMsgerParticipantDropdownDividerMarkup()}
+        ${getMsgerParticipantDropdownActionMarkup(`muteEveryoneBtn${idSuffix}`, 'fas fa-microphone', 'Mute everyone', 'danger')}
+        ${getMsgerParticipantDropdownActionMarkup(`hideEveryoneBtn${idSuffix}`, 'fas fa-video', 'Hide everyone', 'danger')}
+        ${getMsgerParticipantDropdownActionMarkup(`ejectEveryoneBtn${idSuffix}`, 'fas fa-right-from-bracket', 'Eject everyone', 'danger')}
+    `;
+}
+
+function renderMsgerRoomActionsDropdown(dropdownContent, idSuffix = '') {
+    if (!dropdownContent) return;
+    dropdownContent.innerHTML = getMsgerRoomActionsDropdownMarkup(idSuffix);
 }
 
 /**
