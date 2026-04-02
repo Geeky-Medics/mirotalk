@@ -1208,13 +1208,14 @@ body {
 .msger-private-chat-entry {
     display: flex;
     align-items: center;
-    gap: 8px;
     min-width: 0;
     position: relative;
 }
 
 .msger-private-chat-entry .msger-chat-item {
     flex: 1;
+    cursor: pointer;
+    position: relative;
 }
 
 .msger-private-chat-entry .dropdown-menu-custom {
@@ -1228,6 +1229,7 @@ body {
     height: 40px;
     flex-shrink: 0;
     overflow: visible;
+    margin-left: auto;
 }
 
 .msger-private-chat-entry .dropdown-toggle {
@@ -1238,7 +1240,7 @@ body {
     height: 40px;
     padding: 0;
     border-radius: 12px;
-    background: var(--body-bg);
+    background: transparent;
 }
 
 .msger-private-chat-entry .msger-participant-dropdown-menu .app-dropdown-action {
@@ -2510,7 +2512,6 @@ button {
     margin: auto;
     padding: 10px;
     width: 50%;
-    min-height: 560px !important;
     background: var(--body-bg);
     box-shadow: var(--box-shadow);
     border: var(--border);
@@ -2532,7 +2533,6 @@ button {
 @media screen and (max-width: 830px) {
     #mySettings {
         width: 80%;
-        min-height: auto;
     }
     .mySettingsMain {
         flex-direction: row;
@@ -2584,8 +2584,14 @@ button {
 }
 
 #mySettingsHeader {
-    height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
     cursor: move;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    /* border-bottom: 1px solid rgba(255, 255, 255, 0.1); */
+    backdrop-filter: blur(10px);
 }
 
 #mySettings i,
@@ -2627,17 +2633,25 @@ button {
 }
 
 #mySettingsCloseBtn {
-    font-size: 1.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1;
     color: #fff;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     float: right;
-    background: transparent;
-    transition: background 0.23s;
+    background: var(--body-bg);
+    transition: all 0.25s ease;
 }
 
 #mySettingsCloseBtn:hover {
-    background: var(--body-bg);
+    background: var(--right-msg-bg);
+    transform: translateY(-1px);
 }
 
 .form-check-input {
@@ -2700,7 +2714,7 @@ button {
     font-size: 0.9rem;
     border: var(--border);
     border-radius: 10px;
-    background: var(--selctt-bg);
+    background: var(--select-bg);
     outline: none;
     cursor: pointer;
     transition: 0.3s;
@@ -2903,9 +2917,8 @@ button {
 --------------------------------------------------------------*/
 
 .tab {
-    padding: 10px 10px 10px 0;
+    padding: 0px 10px 10px 0; /* top right bottom left */
     overflow: hidden;
-    border-radius: 8px;
     width: 35%;
     background-color: var(--body-bg);
     min-height: 480px;
@@ -2916,9 +2929,9 @@ button {
 
 .tabActions {
     position: relative;
-    padding: 10px 15px 0px 0px;
+    padding: 0px 20px 0px 0px; /* top right bottom left */
     width: 65%;
-    max-height: 530px;
+    max-height: 540px;
     overflow-y: auto;
     overflow-x: hidden;
 }

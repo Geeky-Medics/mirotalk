@@ -15,7 +15,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.7.85
+ * @version 1.7.87
  *
  */
 
@@ -363,8 +363,7 @@ const pinChatByDefaultRow = getId('pinChatByDefaultRow');
 const switchPinChatByDefault = getId('switchPinChatByDefault');
 const keepAwakeButton = getId('keepAwakeButton');
 const switchKeepAwake = getId('switchKeepAwake');
-const pinCaptionByDefaultRow = getId('pinCaptionByDefaultRow');
-const switchPinCaptionByDefault = getId('switchPinCaptionByDefault');
+
 const switchPushToTalk = getId('switchPushToTalk');
 const switchAudioPitchBar = getId('switchAudioPitchBar');
 const audioInputSelect = getId('audioSource');
@@ -656,7 +655,6 @@ let isChatEmojiVisible = false;
 let isChatMarkdownOn = false;
 let isChatPasteTxt = false;
 let pinChatByDefault = false;
-let pinCaptionByDefault = true;
 let speechInMessages = false;
 let isSpeechSynthesisSupported = 'speechSynthesis' in window;
 let transcripts = []; // collect all the transcripts to save it later if you need
@@ -856,7 +854,6 @@ function setButtonsToolTip() {
     setTippy(switchShare, "Show 'Share Room' popup on join.", 'right');
     setTippy(switchKeepButtonsVisible, 'Keep buttons always visible', 'right');
     setTippy(switchPinChatByDefault, 'Open chat pinned by default', 'right');
-    setTippy(switchPinCaptionByDefault, 'Open transcription pinned by default', 'right');
     setTippy(switchKeepAwake, 'Prevent the device from sleeping (if supported)', 'right');
     setTippy(recImage, 'Toggle recording', 'right');
     setTippy(networkIP, 'IP address associated with the ICE candidate', 'right');
@@ -6957,21 +6954,12 @@ function setMySettingsBtn() {
 
     if (!isDesktopDevice) {
         elemDisplay(pinChatByDefaultRow, false);
-        elemDisplay(pinCaptionByDefaultRow, false);
     } else {
         switchPinChatByDefault.addEventListener('change', (e) => {
             pinChatByDefault = e.currentTarget.checked;
             lsSettings.pin_chat_by_default = pinChatByDefault;
             lS.setSettings(lsSettings);
             userLog('toast', `Chat opens pinned by default ${pinChatByDefault ? 'ON' : 'OFF'}`);
-            playSound('switch');
-        });
-
-        switchPinCaptionByDefault.addEventListener('change', (e) => {
-            pinCaptionByDefault = e.currentTarget.checked;
-            lsSettings.pin_caption_by_default = pinCaptionByDefault;
-            lS.setSettings(lsSettings);
-            userLog('toast', `Transcription opens pinned by default ${pinCaptionByDefault ? 'ON' : 'OFF'}`);
             playSound('switch');
         });
     }
@@ -7504,7 +7492,6 @@ function loadSettingsFromLocalStorage() {
     showChatOnMessage = lsSettings.show_chat_on_msg;
     speechInMessages = lsSettings.speech_in_msg;
     pinChatByDefault = lsSettings.pin_chat_by_default;
-    pinCaptionByDefault = lsSettings.pin_caption_by_default;
     msgerShowChatOnMsg.checked = showChatOnMessage;
     msgerSpeechMsg.checked = speechInMessages;
     screenFpsSelect.selectedIndex = lsSettings.screen_fps;
@@ -7521,7 +7508,6 @@ function loadSettingsFromLocalStorage() {
     switchShare.checked = notify;
     switchKeepButtonsVisible.checked = isKeepButtonsVisible;
     switchPinChatByDefault.checked = pinChatByDefault;
-    switchPinCaptionByDefault.checked = pinCaptionByDefault;
     switchAudioPitchBar.checked = isAudioPitchBar;
     switchShortcuts.checked = isShortcutsEnabled;
     keepCustomTheme.checked = themeCustom.keep;
@@ -9587,7 +9573,7 @@ function showCaptionDraggable() {
 
     isCaptionBoxVisible = true;
 
-    if (isDesktopDevice && canBePinned() && pinCaptionByDefault && !isChatPinned && !isCaptionPinned) {
+    if (isDesktopDevice && canBePinned() && !isChatPinned && !isCaptionPinned) {
         captionPin();
     }
 
@@ -10504,11 +10490,12 @@ function ensureChatGPTConversationEntry() {
 
     const chatGPTEntry = `
     <div id="${CHAT_GPT_PEER_ID}_pMsgDiv" class="msger-private-chat-entry" data-peer-name="${CHAT_GPT_NAME.toLowerCase()}">
-        <button
+        <div
             id="${CHAT_GPT_PEER_ID}_pMsgBtn"
             class="msger-chat-item"
-            type="button"
-            value="${CHAT_GPT_NAME}"
+            role="button"
+            tabindex="0"
+            data-value="${CHAT_GPT_NAME}"
             data-peer-id="${CHAT_GPT_PEER_ID}"
             title="${CHAT_GPT_NAME}"
         >
@@ -10523,7 +10510,7 @@ function ensureChatGPTConversationEntry() {
                 <small>Ask anything</small>
             </span>
             <span id="${CHAT_GPT_PEER_ID}_pMsgBadge" class="msger-chat-unread-badge hidden">0</span>
-        </button>
+        </div>
     </div>
     `;
 
@@ -10870,21 +10857,21 @@ async function msgerAddPeers(peers) {
 
                 const msgerPrivateDiv = `
                 <div id="${peer_id}_pMsgDiv" class="msger-private-chat-entry" data-peer-name="${peer_name.toLowerCase()}">
-                    <button id="${peer_id}_pMsgBtn" class="msger-chat-item" type="button" value="${peer_name}" data-peer-id="${peer_id}" title="${peer_name}">
+                    <div id="${peer_id}_pMsgBtn" class="msger-chat-item" role="button" tabindex="0" data-value="${peer_name}" data-peer-id="${peer_id}" title="${peer_name}">
                         <img id="${peer_id}_pMsgAvatar" class="msger-chat-avatar" src="${chatAvatar}" alt="${peer_name}" />
                         <span class="msger-chat-item-copy">
                             <strong>${peer_name}</strong>
                             <small>Open private conversation</small>
                         </span>
                         <span id="${peer_id}_pMsgBadge" class="msger-chat-unread-badge hidden">0</span>
-                    </button>
-                    <div id="${peer_id}_pDropdownMenu" class="dropdown-menu-custom msger-participant-dropdown">
-                        <button id="${peer_id}_pDropdownToggle" class="dropdown-toggle" type="button">
-                            <i class="fas fa-ellipsis-vertical"></i>
-                        </button>
-                        <ul id="${peer_id}_pDropdownMenuList" class="dropdown-menu-custom-list app-dropdown-menu msger-participant-dropdown-menu">
-                            ${dropdownOptions}
-                        </ul>
+                        <div id="${peer_id}_pDropdownMenu" class="dropdown-menu-custom msger-participant-dropdown">
+                            <button id="${peer_id}_pDropdownToggle" class="dropdown-toggle" type="button">
+                                <i class="fas fa-ellipsis-vertical"></i>
+                            </button>
+                            <ul id="${peer_id}_pDropdownMenuList" class="dropdown-menu-custom-list app-dropdown-menu msger-participant-dropdown-menu">
+                                ${dropdownOptions}
+                            </ul>
+                        </div>
                     </div>
                 </div>
                 `;
@@ -11014,12 +11001,13 @@ function addMsgerPrivateBtn(
     // Send private message button
     msgerPrivateBtn.addEventListener('click', (e) => {
         e.preventDefault();
+        if (e.target.closest('.dropdown-menu-custom')) return;
         if (msgerPrivateMsgInput) {
             sendPrivateMessage();
             return;
         }
         const selectedPeerId = msgerPrivateBtn.dataset.peerId || peerId;
-        setActiveConversation('private', msgerPrivateBtn.value, selectedPeerId);
+        setActiveConversation('private', msgerPrivateBtn.dataset.value, selectedPeerId);
         msgerDraggable.classList.remove('msger-pinned-sidebar-open');
         if (shouldDockParticipantsPanel()) {
             msgerCPBtn.classList.remove('active');
@@ -11053,16 +11041,16 @@ function addMsgerPrivateBtn(
             return;
         }
         // sanitization to prevent XSS
-        msgerPrivateBtn.value = filterXSS(msgerPrivateBtn.value);
+        msgerPrivateBtn.dataset.value = filterXSS(msgerPrivateBtn.dataset.value);
         myPeerName = filterXSS(myPeerName);
 
-        if (isHtml(myPeerName) && isHtml(msgerPrivateBtn.value)) {
+        if (isHtml(myPeerName) && isHtml(msgerPrivateBtn.dataset.value)) {
             msgerPrivateMsgInput.value = '';
             isChatPasteTxt = false;
             return;
         }
 
-        const toPeerName = msgerPrivateBtn.value;
+        const toPeerName = msgerPrivateBtn.dataset.value;
         emitMsg(myPeerName, myPeerAvatar, toPeerName, pMsg, true, myPeerId);
         appendMessage(myPeerName, rightChatAvatar, 'right', pMsg, true, null, toPeerName);
         msgerPrivateMsgInput.value = '';
@@ -14762,7 +14750,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.7.85',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.7.87',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: `
