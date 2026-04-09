@@ -41,9 +41,7 @@
     </a>
 </p>
 
-<p align="center"><strong>Proudly sponsored by</strong></p>
-
-<hr />
+<p align="center">Proudly sponsored by</p>
 
 <h1 align=center>Recall.ai - API for meeting recording</h1>
 <p align="center">
@@ -54,28 +52,28 @@
 
 <br />
 
-<details open>
+<details>
 <summary>✨ Why MiroTalk P2P?</summary>
 
 <br/>
 
-|                      | MiroTalk P2P                                                                                                                                        | Other Solutions             |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| 💰 **Cost**          | Free & Open Source (AGPLv3). [One-time fee licenses](https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661) available | Paid plans                  |
-| 🏠 **Self-hosted**   | ✅ Full control over your data                                                                                                                      | ❌ Cloud only               |
-| 🔒 **Privacy**       | Your server, your rules                                                                                                                             | Third-party data processing |
-| ⏱️ **Time limits**   | Unlimited                                                                                                                                           | 40-60 min on free tiers     |
-| 🏢 **Rooms**         | Unlimited concurrent rooms                                                                                                                          | Limited                     |
-| 🎥 **Resolution**    | Up to 8K @ 60fps                                                                                                                                    | Up to 1080p                 |
-| 🌍 **Languages**     | 133 languages                                                                                                                                       | ~30-80                      |
-| 🔌 **API**           | Full REST API included                                                                                                                              | Paid add-on                 |
-| 🤖 **AI Features**   | ChatGPT (OpenAI) integration                                                                                                                        | Paid AI add-ons             |
-| 🧩 **Customization** | Full source code, white-label ready                                                                                                                 | Limited branding options    |
-| 📦 **Deployment**    | Docker, Node.js, one-click install                                                                                                                  | N/A (SaaS only)             |
+|                    | MiroTalk P2P                                                                                                                                        | Other Solutions             |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| 💰 **Cost**        | Free & Open Source (AGPLv3). [One-time fee licenses](https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661) available | Paid plans                  |
+| 🏠 **Self-hosted** | ✅ Full control over your data                                                                                                                      | ❌ Cloud only               |
+| 🔒 **Privacy**     | Your server, your rules                                                                                                                             | Third-party data processing |
+| ⏱️ **Time limits** | Unlimited                                                                                                                                           | 40-60 min on free tiers     |
+| 🏢 **Rooms**       | Unlimited concurrent rooms                                                                                                                          | Limited                     |
+| 🎥 **Resolution**  | Up to 8K @ 60fps                                                                                                                                    | Up to 1080p                 |
+| 🌍 **Languages**   | 133 languages                                                                                                                                       | ~30-80                      |
+| 🔌 **API**         | Full REST API included                                                                                                                              | Paid add-on                 |
+| 🤖 **AI Features** | ChatGPT (OpenAI) integration                                                                                                                        | Paid AI add-ons             |
+| 🧩 **Rebrand**     | Full source code, white-label ready                                                                                                                 | Limited branding options    |
+| 📦 **Deploy**      | Docker, Node.js, one-click install                                                                                                                  | N/A (SaaS only)             |
 
 </details>
 
-<details open>
+<details>
 <summary>🚀 Features</summary>
 
 <br/>
@@ -83,8 +81,8 @@
 - 🎥 Video up to **8K @ 60fps** · Screen sharing · Recording · Picture-in-Picture
 - 💬 Chat with Markdown & emoji · Collaborative whiteboard · File sharing
 - 🤖 ChatGPT (OpenAI) integration · Speech recognition
-- 🔒 OIDC auth · Host protection · JWT credentials · Room passwords · Peer-to-peer encryption
-- 🔌 REST API · Slack & Mattermost · Embeddable iframe & widget · 133 languages
+- 🔒 OIDC auth · [Host protection](https://docs.mirotalk.com/mirotalk-p2p/host-protection/) · JWT credentials · Room passwords · Peer-to-peer encryption
+- 🔌 REST API · Slack & Mattermost · Embeddable [iframe](https://docs.mirotalk.com/mirotalk-p2p/integration/#iframe) & [widget](https://docs.mirotalk.com/mirotalk-p2p/integration/#widgets-integration) · 133 languages
 
 **[See all features →](https://docs.mirotalk.com/overview/)**
 
@@ -110,7 +108,7 @@ Open [http://localhost:3000](http://localhost:3000) - done!
 
 </details>
 
-<details open>
+<details>
 <summary>🐳 Docker</summary>
 
 <br/>
@@ -136,15 +134,16 @@ Open [http://localhost:3000](http://localhost:3000) - done!
 
 </details>
 
-<details open>
+<details>
 <summary>📚 Documentation</summary>
 
 <br/>
 
-For detailed guides and references, visit the **[official documentation](https://docs.mirotalk.com/mirotalk-p2p/)**:
+For detailed guides and references, visit the **[official documentation](https://docs.mirotalk.com)**:
 
 - [About](https://docs.mirotalk.com/mirotalk-p2p/)
 - [Self-Hosting Guide](https://docs.mirotalk.com/mirotalk-p2p/self-hosting/)
+- [Automation-scripts](https://docs.mirotalk.com/scripts/about/)
 - [Configurations](https://docs.mirotalk.com/mirotalk-p2p/configurations/)
 - [Rebranding](https://docs.mirotalk.com/mirotalk-p2p/rebranding/)
 - [Host Protection Mode](https://docs.mirotalk.com/mirotalk-p2p/host-protection/)
@@ -162,13 +161,13 @@ For detailed guides and references, visit the **[official documentation](https:/
 
 <br/>
 
-| Provider                                                                                       | Description                                                                                                                                                          | Link                                                                |
-| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| [![Cloudron](public/sponsors/Cloudron.png)](https://www.cloudron.io/)                          | One-click install from the [Cloudron App Store](https://www.cloudron.io/store/index.html). Automates deployment, updates, backups, and user management.              | [Get Started](https://www.cloudron.io/)                             |
-| [![Hetzner](public/sponsors/Hetzner.png)](https://www.hetzner.com)                             | One of the best [cloud providers](https://www.hetzner.com/cloud) and [dedicated root servers](https://www.hetzner.com/dedicated-rootserver). Used for our live demo. | [Get €20 Free Credits](https://hetzner.cloud/?ref=XdRifCzCK3bn)     |
-| [![Netcup](public/sponsors/Netcup.png)](https://www.netcup.com/en/?ref=309627)                 | Enterprise-grade performance at unbeatable prices. Scalable and reliable.                                                                                            | [Explore Netcup](https://www.netcup.com/en/?ref=309627)             |
-| [![Hostinger](public/advertisers/Hostinger.png)](https://hostinger.com/?REFERRALCODE=MIROTALK) | Fast, reliable hosting with 24/7 support and great performance.                                                                                                      | [Check out Hostinger](https://hostinger.com/?REFERRALCODE=MIROTALK) |
-| [![Contabo](public/advertisers/Contabo.png)](https://www.dpbolvw.net/click-101027391-14462707) | Top-tier German hosting, dedicated servers, VPS, and web hosting at unbeatable prices.                                                                               | [Explore Contabo](https://www.dpbolvw.net/click-101027391-14462707) |
+| Provider                                                                                       | Description                                                                                                                                             | Link                                                                |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| [![Cloudron](public/sponsors/Cloudron.png)](https://www.cloudron.io/)                          | One-click install from the [Cloudron App Store](https://www.cloudron.io/store/index.html). Automates deployment, updates, backups, and user management. | [Get Started](https://www.cloudron.io/)                             |
+| [![Hetzner](public/sponsors/Hetzner.png)](https://www.hetzner.com)                             | High-performance cloud servers and dedicated root servers with top-tier reliability. Powers our live demo.                                              | [Get €20 Free Credits](https://hetzner.cloud/?ref=XdRifCzCK3bn)     |
+| [![Netcup](public/sponsors/Netcup.png)](https://www.netcup.com/en/?ref=309627)                 | Enterprise-grade performance at unbeatable prices. Scalable and reliable.                                                                               | [Explore Netcup](https://www.netcup.com/en/?ref=309627)             |
+| [![Hostinger](public/advertisers/Hostinger.png)](https://hostinger.com/?REFERRALCODE=MIROTALK) | Fast, reliable hosting with 24/7 support and great performance.                                                                                         | [Check out Hostinger](https://hostinger.com/?REFERRALCODE=MIROTALK) |
+| [![Contabo](public/advertisers/Contabo.png)](https://www.dpbolvw.net/click-101027391-14462707) | Top-tier German hosting, dedicated servers, VPS, and web hosting at unbeatable prices.                                                                  | [Explore Contabo](https://www.dpbolvw.net/click-101027391-14462707) |
 
 To set up your own instance of `MiroTalk P2P` on a dedicated cloud server, please refer to our comprehensive [self-hosting documentation](https://docs.mirotalk.com/mirotalk-p2p/self-hosting/).
 
@@ -229,7 +228,7 @@ Do you find MiroTalk P2P indispensable for your needs? Join us in supporting thi
 
 </details>
 
-<details open>
+<details>
 <summary>Past Sponsors</summary>
 
 <br/>
@@ -243,7 +242,7 @@ We are grateful to our past sponsors for their support!
 
 </details>
 
-<details open>
+<details>
 <summary>Advertisers</summary>
 
 ---
@@ -256,19 +255,26 @@ We are grateful to our past sponsors for their support!
 
 </details>
 
-## EffectsSDK ✨
+<details open>
+<summary>✨ EffectsSDK</summary>
 
 [![EffectsSDK](public/sponsors/EffectsSDK.png)](https://effectssdk.ai/)
 
 Enhance your video conferencing with **advanced virtual backgrounds** and **noise suppression**. EffectsSDK offers powerful SDKs and plugins for fast integration.
 
-- 🎥 [AI Video Effects Extension](https://chromewebstore.google.com/detail/effetti-webcam-ai-+-regis/iedbphhbpflhgpihkcceocomcdnemcbj) — Virtual backgrounds and effects for your webcam
-- 🔊 [Noise Cancelling Extension](https://chromewebstore.google.com/detail/noise-cancelling-app/njmhcidcdbaannpafjdljminaigdgolj) — Clearer audio with background noise reduction
-- 🛠️ [Integrate EffectsSDK](https://github.com/EffectsSDK) — SDKs and plugins for custom solutions
+- 🎥 [AI Video Effects Extension](https://chromewebstore.google.com/detail/effetti-webcam-ai-+-regis/iedbphhbpflhgpihkcceocomcdnemcbj): Virtual backgrounds and effects for your webcam
+- 🔊 [Noise Cancelling Extension](https://chromewebstore.google.com/detail/noise-cancelling-app/njmhcidcdbaannpafjdljminaigdgolj): Clearer audio with background noise reduction
+- 🛠️ [Integrate EffectsSDK](https://github.com/EffectsSDK): SDKs and plugins for custom solutions
+
+</details>
+
+<br />
 
 ---
 
 🌐 **Explore all MiroTalk projects:** [MiroTalk Overview →](https://docs.mirotalk.com/overview/)
+
+---
 
 This project is tested with [BrowserStack](https://www.browserstack.com).
 
@@ -276,9 +282,9 @@ This project is tested with [BrowserStack](https://www.browserstack.com).
 
 ## Star History
 
-If you like this project, please star it - every star helps more people discover this free Zoom alternative!
+If you like this project, please star it - every star helps more people discover this project!
 
-[![Star History Chart](https://api.star-history.com/svg?repos=miroslavpejic85/mirotalk&type=Date)](https://star-history.com/#miroslavpejic85/mirotalk&Date)
+![Star History Chart](https://app.repohistory.com/api/svg?repo=miroslavpejic85/mirotalk&type=Date&background=0D1117&color=62C3F8)
 
 ---
 
