@@ -24,29 +24,21 @@
 <p align="center"><strong>MiroTalk P2P</strong> is a <strong>self-hosted, open-source video conferencing</strong> platform using direct <strong>peer-to-peer WebRTC connections</strong> for fast, secure, real-time communication. Deploy on your own server in minutes. Enjoy unlimited rooms, no time limits, end-to-end privacy, and a rich feature set - all under your control.</p>
 
 <p align="center">
-    <a href="https://p2p.mirotalk.com"><img src="https://img.shields.io/badge/🚀_Try_Live_Demo-blue?style=for-the-badge" alt="Try Live Demo"></a>
-    &nbsp;
-    <a href="https://docs.mirotalk.com/mirotalk-p2p/self-hosting/"><img src="https://img.shields.io/badge/📖_Documentation-green?style=for-the-badge" alt="Documentation"></a>
-    &nbsp;
-    <a href="https://discord.gg/rgGYfeYW3N"><img src="https://img.shields.io/badge/💬_Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
-    &nbsp;
-    <a href="https://github.com/sponsors/miroslavpejic85"><img src="https://img.shields.io/badge/❤️_Sponsor-ea4aaa?style=for-the-badge" alt="Sponsor"></a>
+    <a href="https://p2p.mirotalk.com">Try Live Demo</a> · <a href="https://p2p.mirotalk.com/privacy">Privacy</a> · <a href="https://docs.mirotalk.com/mirotalk-p2p/self-hosting/">Documentation</a> · <a href="https://discord.gg/rgGYfeYW3N">Discord</a> · <a href="https://github.com/sponsors/miroslavpejic85">Sponsor</a>
 </p>
 
 <br />
 
 <p align="center">
     <a href="https://p2p.mirotalk.com/">
-        <img src="public/images/mirotalk-header.gif" alt="MiroTalk P2P - Open Source Video Conferencing">
+        <img src="public/images/mirotalk-github.gif" alt="MiroTalk P2P - Open Source Video Conferencing">
     </a>
 </p>
 
 <p align="center">Proudly sponsored by</p>
 
-<h1 align=center>Recall.ai - API for meeting recording</h1>
-<p align="center">
-    <a href="https://www.recall.ai/?utm_source=github&utm_medium=sponsorship&utm_campaign=miroslavpejic85-mirotalk"><strong>Recall.ai</strong></a> – an API for recording Zoom, Google Meet, Microsoft Teams, and in-person meetings.
-</p>
+<h1 align=center><a href="https://www.recall.ai/?utm_source=github&utm_medium=sponsorship&utm_campaign=miroslavpejic85-mirotalk">Recall.ai</a> - API for meeting recording</h1>
+<p align="center">An API for recording Zoom, Google Meet, Microsoft Teams, and in-person meetings.</p>
 
 <hr />
 
@@ -141,6 +133,7 @@ Open [http://localhost:3000](http://localhost:3000) - done!
 
 For detailed guides and references, visit the **[official documentation](https://docs.mirotalk.com)**:
 
+- [Our Story](https://docs.mirotalk.com/story/)
 - [About](https://docs.mirotalk.com/mirotalk-p2p/)
 - [Self-Hosting Guide](https://docs.mirotalk.com/mirotalk-p2p/self-hosting/)
 - [Automation-scripts](https://docs.mirotalk.com/scripts/about/)
@@ -214,7 +207,7 @@ To obtain a [MiroTalk P2P license](https://docs.mirotalk.com/license/licensing-o
 </details>
 
 <details open>
-<summary>Support the project</summary>
+<summary>❤️ Support the project</summary>
 
 <br/>
 
@@ -229,7 +222,7 @@ Do you find MiroTalk P2P indispensable for your needs? Join us in supporting thi
 </details>
 
 <details>
-<summary>Past Sponsors</summary>
+<summary>🙏 Past Sponsors</summary>
 
 <br/>
 
@@ -243,7 +236,7 @@ We are grateful to our past sponsors for their support!
 </details>
 
 <details>
-<summary>Advertisers</summary>
+<summary>📢 Advertisers</summary>
 
 ---
 
@@ -272,21 +265,15 @@ Enhance your video conferencing with **advanced virtual backgrounds** and **nois
 
 ---
 
-🌐 **Explore all MiroTalk projects:** [MiroTalk Overview →](https://docs.mirotalk.com/overview/)
-
----
-
 This project is tested with [BrowserStack](https://www.browserstack.com).
 
 ---
 
-## Star History
+🌐 **Explore all MiroTalk projects:**
 
-If you like this project, please star it - every star helps more people discover this project!
+**[ → MiroTalk Overview](https://docs.mirotalk.com/overview/)**
 
 ![Star History Chart](https://app.repohistory.com/api/svg?repo=miroslavpejic85/mirotalk&type=Date&background=0D1117&color=62C3F8)
-
----
 
 <p align="center">
   Built with ❤️ by <a href="https://www.linkedin.com/in/miroslav-pejic-976a07101/">Miroslav</a> and the open-source community
