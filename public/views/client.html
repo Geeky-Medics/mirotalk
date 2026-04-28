@@ -73,6 +73,23 @@
     <body>
         <noscript>You need to enable JavaScript to run this app.</noscript>
 
+        <!-- Disconnect banner -->
+
+        <div id="disconnectBanner" class="disconnect-banner" role="status" aria-live="assertive" aria-atomic="true">
+            <div class="disconnect-banner-inner">
+                <span class="disconnect-banner-icon-wrap">
+                    <i id="disconnectBannerIcon" class="fa-solid fa-wifi-exclamation"></i>
+                </span>
+                <div class="disconnect-banner-text">
+                    <span id="disconnectBannerTitle">Connection lost</span>
+                    <span id="disconnectBannerMsg">Reconnecting to signaling server&hellip;</span>
+                </div>
+                <span class="disconnect-banner-spinner" id="disconnectBannerSpinner">
+                    <i class="fa-solid fa-circle-notch fa-spin"></i>
+                </span>
+            </div>
+        </div>
+
         <!-- just 4SEO Optimization -->
 
         <div id="webRTCSeo">
@@ -1048,6 +1065,14 @@ access to use this app.
                             <div>
                                 <img id="myProfileAvatar" />
                             </div>
+                            <div>
+                                <button id="myProfileAvatarUploadBtn">
+                                    <i class="fas fa-image"></i>&nbsp;Set avatar URL
+                                </button>
+                                <button id="myProfileAvatarResetBtn" class="hidden">
+                                    <i class="fas fa-rotate-left"></i>&nbsp;Reset avatar
+                                </button>
+                            </div>
                             <br />
                             <div class="title">
                                 <i class="fas fa-user"></i>
@@ -1071,7 +1096,7 @@ access to use this app.
                             <p>Extra info:</p>
                         </div>
                         <div class="extra-info-container">
-                            <pre id="extraInfo"></pre>
+                            <div id="extraInfo"></div>
                         </div>
                     </div>
 
