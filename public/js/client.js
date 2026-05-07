@@ -15,7 +15,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.8.31
+ * @version 1.8.34
  *
  */
 
@@ -517,6 +517,7 @@ const icon = getId('disconnectBannerIcon');
 const title = getId('disconnectBannerTitle');
 const msg = getId('disconnectBannerMsg');
 const spinner = getId('disconnectBannerSpinner');
+let disconnectBannerRafId = null;
 
 //....
 
@@ -624,6 +625,7 @@ let peerConnections = {}; // keep track of our peer connections, indexed by peer
 let chatDataChannels = {}; // keep track of our peer chat data channels
 let fileDataChannels = {}; // keep track of our peer file sharing data channels
 let allPeers = {}; // keep track of all peers in the room, indexed by peer_id == socket.io id
+let pendingIceCandidates = {}; // keep track of pending ICE candidates before the peer connection is ready, indexed by peer_id == socket.io id
 
 let lastStats = null;
 
@@ -2891,13 +2893,16 @@ async function handleOnTrack(peer_id, peers) {
         // Helper to load or attach stream
         const handleStream = (elementId, streamType) => {
             const element = getId(`${peer_id}___${elementId}`);
-            const hasStream = element?.srcObject && (elementId === 'audio' || hasVideoTrack(element.srcObject));
 
-            if (!hasStream) {
+            if (!element) {
+                // Tile doesn't exist yet — create everything
                 loadRemoteMediaStream(inbound, allPeers || peers, peer_id, streamType);
             } else {
+                // Tile already exists (e.g. peer joined with camera off) — just attach the new stream
                 attachMediaStream(element, inbound);
                 elemDisplay(element, true, 'block');
+                // Safari requires an explicit play() after srcObject is reassigned
+                element.play().catch(() => {});
             }
         };
 
@@ -2906,12 +2911,11 @@ async function handleOnTrack(peer_id, peers) {
 
             if (audioElement) {
                 attachMediaStream(audioElement, inbound);
-                if (!audioElement.srcObject) {
-                    audioElement.play().catch((err) => {
-                        console.warn('[AUDIO] Autoplay not allowed by device, setting up fallback:', err);
-                        handleAudioFallback(audioElement, peer_name);
-                    });
-                }
+                // Always call play() — srcObject was just assigned so the old check (!srcObject) was always false
+                audioElement.play().catch((err) => {
+                    console.warn('[AUDIO] Autoplay not allowed by device, setting up fallback:', err);
+                    handleAudioFallback(audioElement, peer_name);
+                });
             } else {
                 loadRemoteMediaStream(inbound, allPeers || peers, peer_id, 'audio');
             }
@@ -3115,10 +3119,19 @@ function handleSessionDescription(config) {
 
     const pc = peerConnections[peer_id];
 
+    if (!pc) {
+        console.warn('[RTCSessionDescription] peer connection missing, ignoring', { peer_id });
+        return;
+    }
+
     // https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/setRemoteDescription
     pc.setRemoteDescription(remote_description)
         .then(() => {
             console.log('setRemoteDescription done!');
+
+            // Drain any queued ICE now that remoteDescription is set.
+            flushIceCandidates(peer_id).catch((err) => console.error('[Error] flushIceCandidates', err));
+
             if (session_description.type == 'offer') {
                 console.log('Creating answer');
                 // https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/createAnswer
@@ -3166,9 +3179,57 @@ function handleSessionDescription(config) {
 function handleIceCandidate(config) {
     const { peer_id, ice_candidate } = config;
     // https://developer.mozilla.org/en-US/docs/Web/API/RTCIceCandidate
-    peerConnections[peer_id].addIceCandidate(new RTCIceCandidate(ice_candidate)).catch((err) => {
+    const pc = peerConnections[peer_id];
+
+    if (!pc) {
+        queueIceCandidate(peer_id, ice_candidate);
+        return;
+    }
+
+    // Queue until remoteDescription is set; otherwise addIceCandidate can fail and the candidate is lost.
+    if (!pc.remoteDescription || !pc.remoteDescription.type) {
+        queueIceCandidate(peer_id, ice_candidate);
+        return;
+    }
+
+    pc.addIceCandidate(new RTCIceCandidate(ice_candidate)).catch((err) => {
         console.error('[Error] addIceCandidate', err);
     });
+}
+
+/**
+ * If addIceCandidate is called before setRemoteDescription, it can fail and the candidate will be lost. To prevent this, we queue candidates until setRemoteDescription is called.
+ * @param {string} peer_id socket.id
+ * @param {object} ice_candidate RTCIceCandidateInit
+ * @returns {void}
+ */
+function queueIceCandidate(peer_id, ice_candidate) {
+    if (!peer_id || !ice_candidate) return;
+    if (!pendingIceCandidates[peer_id]) pendingIceCandidates[peer_id] = [];
+    pendingIceCandidates[peer_id].push(ice_candidate);
+}
+
+/**
+ * When setRemoteDescription is called, we can flush any queued ICE candidates for that peer.
+ * @param {string} peer_id socket.id
+ * @returns {Promise<void>}
+ */
+async function flushIceCandidates(peer_id) {
+    const pc = peerConnections[peer_id];
+    const queued = pendingIceCandidates[peer_id];
+
+    if (!pc || !queued || queued.length === 0) return;
+    if (!pc.remoteDescription || !pc.remoteDescription.type) return;
+
+    delete pendingIceCandidates[peer_id];
+
+    for (const ice of queued) {
+        try {
+            await pc.addIceCandidate(new RTCIceCandidate(ice));
+        } catch (err) {
+            console.error('[Error] addIceCandidate (queued)', err);
+        }
+    }
 }
 
 /**
@@ -3229,6 +3290,7 @@ function handleDisconnect(reason) {
     chatDataChannels = {};
     fileDataChannels = {};
     peerConnections = {};
+    pendingIceCandidates = {};
     peerScreenMediaElements = {};
     peerVideoMediaElements = {};
     peerAudioMediaElements = {};
@@ -3302,6 +3364,7 @@ function handleRemovePeer(config) {
     delete chatDataChannels[peer_id];
     delete fileDataChannels[peer_id];
     delete peerConnections[peer_id];
+    delete pendingIceCandidates[peer_id];
     delete peerScreenMediaElements[peerScreenId];
     delete peerVideoMediaElements[peerVideoId];
     delete peerAudioMediaElements[peerAudioId];
@@ -4718,6 +4781,7 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
             remoteMedia.setAttribute('id', peer_id + '___video');
             remoteMedia.setAttribute('playsinline', true);
             remoteMedia.autoplay = true;
+            remoteMedia.muted = true; // audio is handled by a separate <audio> element; muting allows autoplay on Safari
             remoteMediaControls = isMobileDevice ? false : remoteMediaControls;
             remoteMedia.style.objectFit = 'var(--video-object-fit)';
             remoteMedia.style.name = peer_id + '_typeCam';
@@ -4743,6 +4807,8 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
             videoMediaContainer.appendChild(remoteVideoWrap);
             // attachMediaStream is a part of the adapter.js library
             attachMediaStream(remoteMedia, stream);
+            // Explicitly play – required on mobile Safari where autoplay alone is not enough
+            remoteMedia.play().catch(() => {});
 
             // resize video elements
             adaptAspectRatio();
@@ -4936,6 +5002,7 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
             remoteScreenMedia.setAttribute('id', peer_id + '___screen');
             remoteScreenMedia.setAttribute('playsinline', true);
             remoteScreenMedia.autoplay = true;
+            remoteScreenMedia.muted = true; // audio is handled by a separate <audio> element; muting allows autoplay on Safari
             remoteScreenMedia.controls = remoteMediaControls;
             remoteScreenMedia.style.objectFit = 'contain';
             remoteScreenMedia.style.name = peer_id + '_typeScreen';
@@ -4956,6 +5023,8 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
 
             videoMediaContainer.appendChild(remoteScreenWrap);
             attachMediaStream(remoteScreenMedia, stream);
+            // Explicitly play – required on mobile Safari where autoplay alone is not enough
+            remoteScreenMedia.play().catch(() => {});
             adaptAspectRatio();
 
             // handle remote private messages
@@ -12791,6 +12860,8 @@ function setPeerVideoStatus(peer_id, status) {
             { element: peerVideoPlayer, display: true, mode: 'block' },
             { element: peerVideoAvatarImage, display: false },
         ]);
+        // Safari requires explicit play() when a video element becomes visible again
+        if (peerVideoPlayer) peerVideoPlayer.play().catch(() => {});
         if (peerVideoStatus) {
             setMediaButtonsClass([{ element: peerVideoStatus, status: true, mediaType: 'video' }]);
             setTippy(peerVideoStatus, 'Participant video is on', 'bottom');
@@ -15752,7 +15823,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.8.31',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.8.34',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
@@ -16015,15 +16086,23 @@ function showDisconnectBanner() {
     title.textContent = 'Connection lost';
     msg.innerHTML = 'Reconnecting to signaling server\u2026';
     spinner.style.opacity = '1';
-    // Trigger transition
-    requestAnimationFrame(() => banner.classList.add('visible'));
+    if (disconnectBannerRafId) cancelAnimationFrame(disconnectBannerRafId);
+    disconnectBannerRafId = requestAnimationFrame(() => {
+        disconnectBannerRafId = null;
+        banner.classList.add('visible');
+    });
 }
 
 /**
  * Hide the disconnect banner (or briefly show a reconnected confirmation).
  */
 function hideDisconnectBanner() {
-    if (!banner || !banner.classList.contains('visible')) return;
+    if (!banner) return;
+    if (disconnectBannerRafId) {
+        cancelAnimationFrame(disconnectBannerRafId);
+        disconnectBannerRafId = null;
+    }
+    if (!banner.classList.contains('visible')) return;
     banner.classList.add('reconnected');
     icon.className = 'fa-solid fa-circle-check';
     title.textContent = 'Back online';
