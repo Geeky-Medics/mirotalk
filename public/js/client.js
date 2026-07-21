@@ -15,7 +15,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.8.69
+ * @version 1.8.70
  *
  */
 
@@ -435,6 +435,8 @@ const shareMediaAudioVideoBtn = getId('shareMediaAudioVideoBtn');
 // My whiteboard
 const whiteboard = getId('whiteboard');
 const whiteboardHeader = getId('whiteboardHeader');
+const whiteboardBottomDragHandle = getId('whiteboardBottomDragHandle');
+const whiteboardBottomLeftDragHandle = getId('whiteboardBottomLeftDragHandle');
 const whiteboardTitle = getId('whiteboardTitle');
 const whiteboardOptions = getId('whiteboardOptions');
 const wbDrawingColorEl = getId('wbDrawingColorEl');
@@ -6949,6 +6951,8 @@ function setMyHandBtn() {
  */
 function setMyWhiteboardBtn() {
     dragElement(whiteboard, whiteboardHeader);
+    dragElement(whiteboard, whiteboardBottomDragHandle);
+    dragElement(whiteboard, whiteboardBottomLeftDragHandle);
 
     setupWhiteboard();
 
@@ -15962,7 +15966,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.8.69',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.8.70',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
@@ -16070,8 +16074,10 @@ function dragElement(elmnt, dragObj) {
         pos2 = pos4 - e.clientY;
         pos3 = e.clientX;
         pos4 = e.clientY;
-        // set the element's new position:
-        elmnt.style.top = elmnt.offsetTop - pos2 + 'px';
+        // set the element's new position with top boundary check (min 0px):
+        let newTop = elmnt.offsetTop - pos2;
+        if (newTop < 0) newTop = 0;
+        elmnt.style.top = newTop + 'px';
         elmnt.style.left = elmnt.offsetLeft - pos1 + 'px';
     }
 
