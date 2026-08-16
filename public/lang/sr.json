@@ -378,7 +378,7 @@
         "Start Caption": "Старт Цаптион",
         "Start Conversation": "Započni razgovor",
         "Stun": "Stun",
-        "Test Speaker": "Testiraj zvučnik",
+        "Test": "Testiraj",
         "Text": "Tekst",
         "The room is limited to": "Соба је ограничена на",
         "The Username is already in use.": "Корисничко име је већ у употреби.",
@@ -463,7 +463,7 @@
         "The room is locked, try with another one.": "Soba je zaključana, pokušajte sa drugom.",
         "Time Limit Reached": "Dostignuto vremensko ograničenje",
         "Username": "Корисничко име",
-        "WebRTC P2P v1.8.99": "WebRTC P2P v1.8.99",
+        "WebRTC P2P v1.9.00": "WebRTC P2P v1.9.00",
         "Whiteboard Shortcuts": "Prečice table",
         "Yes": "Da"
     },

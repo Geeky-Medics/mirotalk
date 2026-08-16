@@ -378,7 +378,7 @@
         "Start Caption": "Начальная подпись",
         "Start Conversation": "Начать беседу",
         "Stun": "Stun",
-        "Test Speaker": "Проверить динамик",
+        "Test": "Проверить",
         "Text": "Текст",
         "The room is limited to": "В номере ограничено",
         "The Username is already in use.": "Имя пользователя уже используется.",
@@ -463,7 +463,7 @@
         "The room is locked, try with another one.": "Комната заблокирована, попробуйте другую.",
         "Time Limit Reached": "Достигнут лимит времени",
         "Username": "Имя пользователя",
-        "WebRTC P2P v1.8.99": "WebRTC P2P v1.8.99",
+        "WebRTC P2P v1.9.00": "WebRTC P2P v1.9.00",
         "Whiteboard Shortcuts": "Горячие клавиши доски",
         "Yes": "Да"
     },

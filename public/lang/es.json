@@ -378,7 +378,7 @@
         "Start Caption": "Título inicial",
         "Start Conversation": "Iniciar conversación",
         "Stun": "Stun",
-        "Test Speaker": "Probar el altavoz",
+        "Test": "Probar",
         "Text": "Texto",
         "The room is limited to": "La habitación está limitada a",
         "The Username is already in use.": "El nombre de usuario ya está en uso.",
@@ -463,7 +463,7 @@
         "The room is locked, try with another one.": "La sala está bloqueada, prueba con otra.",
         "Time Limit Reached": "Límite de tiempo alcanzado",
         "Username": "Nombre de usuario",
-        "WebRTC P2P v1.8.99": "WebRTC P2P v1.8.99",
+        "WebRTC P2P v1.9.00": "WebRTC P2P v1.9.00",
         "Whiteboard Shortcuts": "Atajos de la pizarra",
         "Yes": "Sí"
     },
