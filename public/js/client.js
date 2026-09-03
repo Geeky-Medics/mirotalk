@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.9.35
+ * @version 1.9.38
  *
  */
 
@@ -420,6 +420,7 @@ const lastRecordingInfo = getId('lastRecordingInfo');
 const themeSelect = getId('mirotalkTheme');
 const videoObjFitSelect = getId('videoObjFitSelect');
 const btnsBarSelect = getId('mainButtonsBarPosition');
+const BtnAspectRatio = getId('BtnAspectRatio');
 const participantViewDropdown = getId('participantViewDropdown');
 const participantViewButton = getId('participantViewButton');
 const participantViewMenu = getId('participantViewMenu');
@@ -3516,6 +3517,9 @@ let themeMap = {
         '--btn-bar-color': '#121214',
         '--btns-bg-color': 'rgba(18, 18, 20, 0.75)',
         '--dd-color': '#E8E8EC',
+        '--toggle-off-bg': '#000000',
+        '--toggle-on-bg': 'green',
+        '--toggle-on-ink': '#FFFFFF',
     },
     grey: {
         '--body-bg': 'radial-gradient(#3b3f47, #1e2028)',
@@ -3654,6 +3658,10 @@ function applyThemeVars(vars) {
     for (const [prop, value] of Object.entries(vars)) {
         setSP(prop, value);
     }
+    setSP('--toggle-off-bg', vars['--toggle-off-bg'] || vars['--select-bg'] || '#000000');
+    setSP('--toggle-on-bg', vars['--toggle-on-bg'] || vars['--dd-color'] || 'green');
+    setSP('--toggle-off-ink', vars['--toggle-off-ink'] || '#FFFFFF');
+    setSP('--toggle-on-ink', vars['--toggle-on-ink'] || vars['--btn-bar-color'] || '#FFFFFF');
     document.body.style.background = vars['--body-bg'];
 }
 
@@ -3679,6 +3687,9 @@ function setCustomTheme() {
         '--btn-bar-bg-color': '#FFFFFF',
         '--btn-bar-color': '#000000',
         '--btns-bg-color': color,
+        '--toggle-off-bg': `color-mix(in srgb, ${color} 55%, black)`,
+        '--toggle-on-bg': `color-mix(in srgb, ${color} 55%, white)`,
+        '--toggle-on-ink': '#101314',
     });
 }
 
@@ -5286,14 +5297,24 @@ function handleDropdownEvents(dropdownDiv, dropdownBtn, dropdownContent) {
             clearTimeout(closeTimer);
             closeTimer = null;
         }
-        const rect = dropdownBtn.getBoundingClientRect();
-        dropdownContent.style.top = rect.bottom + 2 + 'px';
-        dropdownContent.style.right = window.innerWidth - rect.right + 'px';
-        dropdownContent.style.left = 'auto';
         document.querySelectorAll('.navbar-dropdown-content.show').forEach((el) => {
             if (el !== dropdownContent) el.classList.remove('show');
         });
         dropdownContent.classList.add('show');
+
+        const gap = 2;
+        const viewportPadding = 8;
+        const triggerRect = dropdownBtn.getBoundingClientRect();
+        const menuRect = dropdownContent.getBoundingClientRect();
+        const opensUpward = triggerRect.bottom + gap + menuRect.height > window.innerHeight - viewportPadding;
+        const top = opensUpward ? triggerRect.top - menuRect.height - gap : triggerRect.bottom + gap;
+        const left = triggerRect.right - menuRect.width;
+
+        dropdownContent.style.top =
+            Math.max(viewportPadding, Math.min(top, window.innerHeight - menuRect.height - viewportPadding)) + 'px';
+        dropdownContent.style.left =
+            Math.max(viewportPadding, Math.min(left, window.innerWidth - menuRect.width - viewportPadding)) + 'px';
+        dropdownContent.style.right = 'auto';
     }
 
     function scheduleClose() {
@@ -5409,6 +5430,12 @@ function adaptAspectRatio() {
         participantsCount > 1
             ? elemDisplay(participantsCountBadge, true, 'flex')
             : elemDisplay(participantsCountBadge, false);
+    }
+
+    const selectedAspectRatio = Number(lsSettings.video_aspect_ratio) || 0;
+    if (selectedAspectRatio) {
+        setAspectRatio(selectedAspectRatio);
+        return;
     }
 
     // desktop aspect ratio
@@ -8169,6 +8196,11 @@ function setupMySettings() {
     participantViewMode.addEventListener('change', () => {
         setParticipantViewMode(participantViewMode.value);
     });
+    BtnAspectRatio.addEventListener('change', () => {
+        lsSettings.video_aspect_ratio = Number(BtnAspectRatio.value);
+        lS.setSettings(lsSettings);
+        adaptAspectRatio();
+    });
 
     // Mobile not support pin/unpin video
     if (!isMobileDevice) {
@@ -8418,6 +8450,7 @@ function loadSettingsFromLocalStorage() {
     btnsBarSelect.selectedIndex = lsSettings.buttons_bar;
     pinVideoPositionSelect.selectedIndex = lsSettings.pin_grid;
     participantViewMode.value = lsSettings.participant_view || 'grid';
+    BtnAspectRatio.value = String(lsSettings.video_aspect_ratio || 0);
     setSP('--video-object-fit', videoObjFitSelect.value);
     setButtonsBarPosition(btnsBarSelect.value);
     setParticipantViewMode(participantViewMode.value, false, false);
@@ -16677,7 +16710,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.9.35',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.9.38',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
