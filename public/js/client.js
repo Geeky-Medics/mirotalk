@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.9.58
+ * @version 1.9.60
  *
  */
 
@@ -7368,7 +7368,6 @@ function setRoomEmojiButton() {
             sendToServer('message', message);
         }
         handleEmoji(message);
-        toggleEmojiPicker();
     }
 
     function toggleEmojiPicker() {
@@ -7388,8 +7387,14 @@ function setChatEmojiBtn() {
     msgerEmojiBtn.addEventListener('click', (e) => {
         // prevent refresh page
         e.preventDefault();
-        hideShowEmojiPicker();
+        if (isMobileDevice || e.detail === 0) {
+            hideShowEmojiPicker();
+        }
     });
+    if (!isMobileDevice) {
+        msgerEmojiBtn.addEventListener('mouseenter', showChatEmojiPicker);
+        msgerEmojiBtn.closest('.msger-composer')?.addEventListener('mouseleave', hideChatEmojiPicker);
+    }
     // Add emoji picker
     const pickerOptions = {
         theme: 'dark',
@@ -7400,9 +7405,7 @@ function setChatEmojiBtn() {
 
     handleClickOutside(emojiPicker, msgerEmojiBtn, () => {
         if (isChatEmojiVisible) {
-            elemDisplay(msgerEmojiPicker, false);
-            setColor(msgerEmojiBtn, '#FFFFFF');
-            isChatEmojiVisible = false;
+            hideChatEmojiPicker();
         }
     });
 }
@@ -12870,11 +12873,19 @@ async function getChatGPTmessage(msg) {
  */
 function hideShowEmojiPicker() {
     if (!isChatEmojiVisible) {
-        elemDisplay(msgerEmojiPicker, true, 'block');
-        setColor(msgerEmojiBtn, '#FFFF00');
-        isChatEmojiVisible = true;
+        showChatEmojiPicker();
         return;
     }
+    hideChatEmojiPicker();
+}
+
+function showChatEmojiPicker() {
+    elemDisplay(msgerEmojiPicker, true, 'block');
+    setColor(msgerEmojiBtn, '#FFFF00');
+    isChatEmojiVisible = true;
+}
+
+function hideChatEmojiPicker() {
     elemDisplay(msgerEmojiPicker, false);
     setColor(msgerEmojiBtn, '#FFFFFF');
     isChatEmojiVisible = false;
@@ -16902,7 +16913,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.9.58',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.9.60',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
