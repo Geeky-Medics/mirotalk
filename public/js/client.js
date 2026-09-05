@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.9.53
+ * @version 1.9.58
  *
  */
 
@@ -463,6 +463,7 @@ const whiteboardObjectBtn = getId('whiteboardObjectBtn');
 const whiteboardEraserBtn = getId('whiteboardEraserBtn');
 const whiteboardUndoBtn = getId('whiteboardUndoBtn');
 const whiteboardRedoBtn = getId('whiteboardRedoBtn');
+const whiteboardResponsiveActionsMenu = getId('whiteboardResponsiveActionsMenu');
 const whiteboardDropDownMenuBtn = getId('whiteboardDropDownMenuBtn');
 const whiteboardDropdownMenu = getId('whiteboardDropdownMenu');
 const whiteboardImgFileBtn = getId('whiteboardImgFileBtn');
@@ -3668,6 +3669,7 @@ function applyThemeVars(vars) {
     for (const [prop, value] of Object.entries(vars)) {
         setSP(prop, value);
     }
+    setSP('--room-switch-accent', vars['--room-switch-accent'] || vars['--dd-color'] || '#4678f9');
     setSP('--toggle-off-bg', vars['--toggle-off-bg'] || vars['--select-bg'] || '#000000');
     setSP('--toggle-on-bg', vars['--toggle-on-bg'] || vars['--dd-color'] || 'green');
     setSP('--toggle-off-ink', vars['--toggle-off-ink'] || '#FFFFFF');
@@ -3697,6 +3699,7 @@ function setCustomTheme() {
         '--btn-bar-bg-color': '#FFFFFF',
         '--btn-bar-color': '#000000',
         '--btns-bg-color': color,
+        '--room-switch-accent': `color-mix(in srgb, ${color} 45%, white)`,
         '--toggle-off-bg': `color-mix(in srgb, ${color} 55%, black)`,
         '--toggle-on-bg': `color-mix(in srgb, ${color} 55%, white)`,
         '--toggle-on-ink': '#101314',
@@ -7231,40 +7234,61 @@ function setRoomEmojiButton() {
         { emoji: '🚀', shortcodes: ':rocket:' },
     ];
 
-    // Header with close button
     const header = document.createElement('div');
     header.className = 'room-emoji-header';
 
-    const title = document.createElement('span');
-    title.textContent = 'Emoji Picker';
+    const title = document.createElement('div');
     title.className = 'room-emoji-title';
 
-    // Create a close button for the emoji picker
+    const titleMark = document.createElement('span');
+    titleMark.className = 'room-emoji-title-mark';
+    titleMark.innerHTML = '<i class="fas fa-face-smile" aria-hidden="true"></i>';
+
+    const titleText = document.createElement('span');
+    titleText.className = 'room-emoji-title-text';
+    titleText.textContent = 'Room Emoji';
+
+    title.appendChild(titleMark);
+    title.appendChild(titleText);
+
     const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
     closeBtn.className = 'room-emoji-close-btn';
+    closeBtn.setAttribute('aria-label', 'Close room emoji');
     closeBtn.innerHTML = icons.close;
 
     header.appendChild(title);
     header.appendChild(closeBtn);
 
-    // Tabs (less invasive style)
     const tabContainer = document.createElement('div');
     tabContainer.className = 'room-emoji-tab-container';
+    tabContainer.setAttribute('role', 'tablist');
+    tabContainer.setAttribute('aria-label', 'Room emoji categories');
 
     const allTab = document.createElement('button');
-    allTab.textContent = 'All';
+    allTab.type = 'button';
+    allTab.innerHTML = '<i class="fas fa-face-smile" aria-hidden="true"></i><span>All</span>';
     allTab.className = 'room-emoji-tab active';
+    allTab.setAttribute('role', 'tab');
+    allTab.setAttribute('aria-selected', 'true');
+    allTab.setAttribute('aria-controls', 'roomEmojiMart');
 
     const soundTab = document.createElement('button');
-    soundTab.textContent = 'Sounds';
+    soundTab.type = 'button';
+    soundTab.innerHTML = '<i class="fas fa-volume-high" aria-hidden="true"></i><span>Sounds</span>';
     soundTab.className = 'room-emoji-tab';
+    soundTab.setAttribute('role', 'tab');
+    soundTab.setAttribute('aria-selected', 'false');
+    soundTab.setAttribute('aria-controls', 'roomEmojiSounds');
 
     tabContainer.appendChild(allTab);
     tabContainer.appendChild(soundTab);
 
     // EmojiMart picker (default)
     const emojiMartDiv = document.createElement('div');
+    emojiMartDiv.id = 'roomEmojiMart';
     emojiMartDiv.className = 'room-emoji-mart';
+    emojiMartDiv.setAttribute('role', 'tabpanel');
     const pickerRoomOptions = {
         theme: 'dark',
         onEmojiSelect: sendEmojiToRoom,
@@ -7274,7 +7298,9 @@ function setRoomEmojiButton() {
 
     // Custom sound emoji grid (6 per row, circular hover effect)
     const emojiGrid = document.createElement('div');
+    emojiGrid.id = 'roomEmojiSounds';
     emojiGrid.className = 'room-emoji-grid';
+    emojiGrid.setAttribute('role', 'tabpanel');
 
     // Set grid layout only when visible
     function showEmojiGrid() {
@@ -7292,16 +7318,21 @@ function setRoomEmojiButton() {
         emojiGrid.appendChild(btn);
     });
 
-    // Tab switching
+    function setActiveRoomEmojiTab(activeTab) {
+        const isAllActive = activeTab === allTab;
+        allTab.classList.toggle('active', isAllActive);
+        soundTab.classList.toggle('active', !isAllActive);
+        allTab.setAttribute('aria-selected', String(isAllActive));
+        soundTab.setAttribute('aria-selected', String(!isAllActive));
+    }
+
     allTab.onclick = () => {
-        allTab.classList.add('active');
-        soundTab.classList.remove('active');
+        setActiveRoomEmojiTab(allTab);
         emojiMartDiv.style.display = 'block';
         hideEmojiGrid();
     };
     soundTab.onclick = () => {
-        soundTab.classList.add('active');
-        allTab.classList.remove('active');
+        setActiveRoomEmojiTab(soundTab);
         emojiMartDiv.style.display = 'none';
         showEmojiGrid();
     };
@@ -7337,17 +7368,16 @@ function setRoomEmojiButton() {
             sendToServer('message', message);
         }
         handleEmoji(message);
+        toggleEmojiPicker();
     }
 
     function toggleEmojiPicker() {
         const roomEmojiPickerIcon = roomEmojiPickerBtn.querySelector('i');
-        if (emojiPickerContainer.style.display === 'block') {
-            elemDisplay(emojiPickerContainer, false);
-            setColor(roomEmojiPickerIcon, 'var(--btn-bar-bg-color)');
-        } else {
-            emojiPickerContainer.style.display = 'block';
-            setColor(roomEmojiPickerIcon, 'yellow');
-        }
+        const isOpen = emojiPickerContainer.style.display !== 'block';
+        emojiPickerContainer.style.display = isOpen ? 'block' : 'none';
+        roomEmojiPickerBtn.classList.toggle('is-active', isOpen);
+        roomEmojiPickerBtn.setAttribute('aria-pressed', String(isOpen));
+        setColor(roomEmojiPickerIcon, isOpen ? '#ffd600' : 'var(--btn-bar-bg-color)');
     }
 }
 
@@ -7430,9 +7460,12 @@ function setMyWhiteboardBtn() {
         whiteboardAction(getWhiteboardAction('redo'));
     });
     whiteboardDropDownMenuBtn.addEventListener('click', function () {
-        whiteboardDropdownMenu.style.display === 'block'
-            ? elemDisplay(whiteboardDropdownMenu, false)
-            : elemDisplay(whiteboardDropdownMenu, true, 'block');
+        if (whiteboardDropdownMenu.style.display === 'block') {
+            elemDisplay(whiteboardDropdownMenu, false);
+        } else {
+            elemDisplay(whiteboardDropdownMenu, true, 'block');
+            updateWhiteboardDropdownMaxHeight();
+        }
     });
     whiteboardSaveBtn.addEventListener('click', (e) => {
         wbCanvasSaveImg();
@@ -7487,6 +7520,7 @@ function setMyWhiteboardBtn() {
     });
     whiteboardGhostButton.addEventListener('click', (e) => {
         wbIsBgTransparent = !wbIsBgTransparent;
+        setWhiteboardControlState(whiteboardGhostButton, wbIsBgTransparent);
         //setWhiteboardBgColor(wbIsBgTransparent ? 'rgba(0, 0, 0, 0.100)' : wbBackgroundColorEl.value);
         wbIsBgTransparent ? wbCanvasBackgroundColor('rgba(0, 0, 0, 0.100)') : setTheme();
     });
@@ -14632,6 +14666,39 @@ function setupWhiteboard() {
     setupWhiteboardShortcuts();
     setupWhiteboardDragAndDrop();
     setupWhiteboardResizeListener();
+    setupWhiteboardResponsiveActions();
+}
+
+/**
+ * Move secondary actions into the dropdown when toolbar space is limited.
+ */
+function setupWhiteboardResponsiveActions() {
+    const compactToolbar = window.matchMedia('(max-width: 768px)');
+    const responsiveActions = Array.from(whiteboardOptions.querySelectorAll('.whiteboard-responsive-action'));
+    const actionAnchors = responsiveActions.map((button) => {
+        const anchor = document.createComment(`${button.id}-anchor`);
+        button.before(anchor);
+        return [button, anchor];
+    });
+
+    const updateResponsiveActions = (event) => {
+        actionAnchors.forEach(([button, anchor]) => {
+            event.matches ? whiteboardResponsiveActionsMenu.appendChild(button) : anchor.after(button);
+        });
+    };
+
+    updateResponsiveActions(compactToolbar);
+    compactToolbar.addEventListener('change', updateResponsiveActions);
+}
+
+/**
+ * Keep the dropdown inside both the rendered whiteboard and the viewport.
+ */
+function updateWhiteboardDropdownMaxHeight() {
+    const menuTop = whiteboardDropdownMenu.getBoundingClientRect().top;
+    const boundary = Math.min(whiteboard.getBoundingClientRect().bottom, window.innerHeight);
+    const availableHeight = Math.max(0, Math.floor(boundary - menuTop - 8));
+    whiteboardDropdownMenu.style.setProperty('--whiteboard-dropdown-max-height', `${availableHeight}px`);
 }
 
 /**
@@ -14644,6 +14711,9 @@ function setupWhiteboardResizeListener() {
         resizeFrame = requestAnimationFrame(() => {
             if (wbCanvas && wbIsOpen) {
                 setupWhiteboardCanvasSize();
+            }
+            if (whiteboardDropdownMenu.style.display === 'block') {
+                updateWhiteboardDropdownMaxHeight();
             }
         });
     });
@@ -14681,7 +14751,7 @@ function drawCanvasGrid() {
     wbCanvas.add(gridGroup);
     gridGroup.sendToBack();
     wbCanvas.renderAll();
-    setColor(whiteboardGridBtn, 'green');
+    setWhiteboardControlState(whiteboardGridBtn, true);
 }
 
 /**
@@ -14705,7 +14775,7 @@ function removeCanvasGrid() {
     });
     wbGridLines = [];
     wbCanvas.renderAll();
-    setColor(whiteboardGridBtn, 'white');
+    setWhiteboardControlState(whiteboardGridBtn, false);
 }
 
 /**
@@ -14824,7 +14894,7 @@ function whiteboardResetAllMode() {
 function whiteboardIsPencilMode(status) {
     wbCanvas.isDrawingMode = status;
     wbIsPencil = status;
-    setColor(whiteboardPencilBtn, wbIsPencil ? 'green' : 'white');
+    setWhiteboardControlState(whiteboardPencilBtn, wbIsPencil);
 }
 
 /**
@@ -14834,7 +14904,7 @@ function whiteboardIsVanishingMode(status) {
     wbCanvas.isDrawingMode = status;
     wbIsVanishing = status;
     wbCanvas.freeDrawingBrush.color = wbIsVanishing ? 'yellow' : wbDrawingColorEl.value;
-    setColor(whiteboardVanishingBtn, wbIsVanishing ? 'green' : 'white');
+    setWhiteboardControlState(whiteboardVanishingBtn, wbIsVanishing);
 }
 
 /**
@@ -14842,7 +14912,7 @@ function whiteboardIsVanishingMode(status) {
  */
 function whiteboardIsObjectMode(status) {
     wbIsObject = status;
-    setColor(whiteboardObjectBtn, status ? 'green' : 'white');
+    setWhiteboardControlState(whiteboardObjectBtn, wbIsObject);
 }
 
 /**
@@ -14850,16 +14920,26 @@ function whiteboardIsObjectMode(status) {
  */
 function whiteboardIsEraserMode(status) {
     wbIsEraser = status;
-    setColor(whiteboardEraserBtn, wbIsEraser ? 'green' : 'white');
+    setWhiteboardControlState(whiteboardEraserBtn, wbIsEraser);
 }
 
 /**
- * Set color to specific element
- * @param {object} elem element
- * @param {string} color to set
+ * Reflect a whiteboard toggle or mode in its visual and accessible state.
+ * @param {HTMLElement} control whiteboard control
+ * @param {boolean} isActive whether the control is active
  */
-function setColor(elem, color) {
-    elem.style.color = color;
+function setWhiteboardControlState(control, isActive) {
+    control.classList.toggle('is-active', isActive);
+    control.setAttribute('aria-pressed', String(isActive));
+}
+
+/**
+ * Set color on a specific element.
+ * @param {HTMLElement} element target element
+ * @param {string} color CSS color value
+ */
+function setColor(element, color) {
+    element.style.color = color;
 }
 
 /**
@@ -16822,7 +16902,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.9.53',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.9.58',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
@@ -18091,6 +18171,7 @@ function handleDropdownHover() {
         const showWhiteboardDropdown = () => {
             clearTimeout(wbTimeoutId);
             elemDisplay(whiteboardDropdownMenu, true, 'block');
+            updateWhiteboardDropdownMaxHeight();
         };
 
         const hideWhiteboardDropdown = () => {
