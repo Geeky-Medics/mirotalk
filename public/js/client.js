@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.9.61
+ * @version 1.9.62
  *
  */
 
@@ -916,8 +916,12 @@ function setButtonsToolTip() {
     // Settings
     setTippy(mySettingsCloseBtn, 'Close', 'bottom');
     setTippy(myPeerNameSetBtn, 'Change name', 'top');
-    const copyRoomUrlLabel = isMobileDevice ? 'Share room link' : 'Copy room link';
-    copyRoomUrlBtn.setAttribute('aria-label', copyRoomUrlLabel);
+    const copyRoomUrlLabel = 'Share room link';
+    const translatedCopyRoomUrlLabel =
+        window.i18n && typeof window.i18n.t === 'function'
+            ? window.i18n.t(copyRoomUrlLabel, 'labels')
+            : copyRoomUrlLabel;
+    copyRoomUrlBtn.setAttribute('aria-label', translatedCopyRoomUrlLabel);
     setTippy(copyRoomUrlBtn, copyRoomUrlLabel, 'left');
     setTippy(mySessionTime, 'Session time', 'right');
     setTippy(
@@ -8175,7 +8179,7 @@ function setupMySettings() {
     });
     // Copy or share room URL
     copyRoomUrlBtn.addEventListener('click', () => {
-        isMobileDevice ? shareRoomUrl() : copyRoomURL();
+        typeof navigator.share === 'function' ? shareRoomUrl() : copyRoomURL();
     });
     // Fetch and display all active rooms with their participant counts
     activeRoomsBtn.addEventListener('click', () => {
@@ -16916,7 +16920,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.9.61',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v1.9.62',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
