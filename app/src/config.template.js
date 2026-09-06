@@ -404,7 +404,7 @@ module.exports = {
                     <a
                         class="about-primary-action"
                         data-umami-event="About button"
-                        href="https://docs.mirotalk.com/sites/p2p.html"
+                        href="https://docs.mirotalk.com/sites/p2p"
                         target="_blank"
                         rel="noopener noreferrer"
                     >
