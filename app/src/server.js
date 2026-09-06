@@ -45,7 +45,7 @@ dependencies: {
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 1.9.62
+ * @version 1.9.63
  *
  */
 
@@ -155,6 +155,14 @@ const hostCfg = {
     maxRoomParticipants: config.host.maxRoomParticipants,
     showActiveRooms: config.host.showActiveRooms,
 };
+
+// Validate host user passwords if host protection or user authentication is enabled
+if (
+    (hostCfg.protected || hostCfg.user_auth) &&
+    (!Array.isArray(hostCfg.users) || hostCfg.users.some((user) => !user || !Validate.isValidPassword(user.password)))
+) {
+    throw new Error('HOST_USERS passwords must contain between 1 and 32 characters');
+}
 
 // JWT config
 const jwtCfg = {
@@ -824,6 +832,11 @@ app.post('/login', loginLimiter, (req, res) => {
     if (!username || !password) {
         log.warn('Login failed: missing username or password', req.body);
         return res.status(400).json({ message: 'Missing username or password' });
+    }
+
+    if (!Validate.isValidPassword(password)) {
+        log.warn('Login failed: invalid password length', { ip });
+        return res.status(400).json({ message: 'Invalid password' });
     }
 
     const isPeerValid = isAuthPeer(username, password);
