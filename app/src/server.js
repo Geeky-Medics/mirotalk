@@ -161,7 +161,7 @@ if (
     (hostCfg.protected || hostCfg.user_auth) &&
     (!Array.isArray(hostCfg.users) || hostCfg.users.some((user) => !user || !Validate.isValidPassword(user.password)))
 ) {
-    throw new Error('HOST_USERS passwords must contain between 1 and 32 characters');
+    throw new Error('HOST_USERS passwords must contain between 1 and 36 characters');
 }
 
 // JWT config
