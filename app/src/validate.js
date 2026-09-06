@@ -4,6 +4,12 @@ const path = require('path');
 
 const checkXSS = require('./xss.js');
 
+const MAX_PASSWORD_LENGTH = 32;
+
+function isValidPassword(input) {
+    return typeof input === 'string' && input.length > 0 && input.length <= MAX_PASSWORD_LENGTH;
+}
+
 function isValidRoomName(input) {
     if (!input || typeof input !== 'string') {
         return false;
@@ -184,6 +190,7 @@ function sanitizeWbCanvasJson(config, onDrop) {
 }
 
 module.exports = {
+    isValidPassword,
     isValidRoomName,
     hasPathTraversal,
     isValidData,

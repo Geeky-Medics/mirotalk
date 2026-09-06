@@ -20,7 +20,7 @@ const SERVER = path.join(__dirname, '..', 'app', 'src', 'server.js');
 // Host credentials injected via HOST_USERS below (kept explicit so the test does
 // not depend on the developer's local .env).
 const HOST_USER = 'MiroTalk';
-const HOST_PASS = 'P2P';
+const HOST_PASS = 'a'.repeat(32);
 
 let serverProcess;
 
