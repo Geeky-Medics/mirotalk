@@ -94,7 +94,7 @@ module.exports = {
     host: {
         protected: getEnvBoolean(process.env.HOST_PROTECTED),
         userAuth: getEnvBoolean(process.env.HOST_USER_AUTH),
-        // HOST_USERS passwords must contain between 1 and 32 characters.
+        // HOST_USERS passwords must contain between 1 and 36 characters.
         users: parseJsonEnv(process.env.HOST_USERS, [{ username: 'MiroTalk', password: 'P2P' }]),
         maxLoginAttempts: process.env.HOST_MAX_LOGIN_ATTEMPTS || 5,
         minLoginBlockTime: process.env.HOST_MIN_LOGIN_BLOCK_TIME || 15, // in minutes

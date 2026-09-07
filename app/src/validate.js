@@ -4,7 +4,7 @@ const path = require('path');
 
 const checkXSS = require('./xss.js');
 
-const MAX_PASSWORD_LENGTH = 32;
+const MAX_PASSWORD_LENGTH = 36;
 
 function isValidPassword(input) {
     return typeof input === 'string' && input.length > 0 && input.length <= MAX_PASSWORD_LENGTH;

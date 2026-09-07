@@ -8,14 +8,14 @@ const checkValidator = require('../app/src/validate');
 
 describe('test-Validator', () => {
     describe('0. Validate passwords', () => {
-        it('should accept non-empty passwords up to 32 characters', () => {
+        it('should accept non-empty passwords up to 36 characters', () => {
             checkValidator.isValidPassword('password').should.be.true();
-            checkValidator.isValidPassword('a'.repeat(32)).should.be.true();
+            checkValidator.isValidPassword('550e8400-e29b-41d4-a716-446655440000').should.be.true();
         });
 
         it('should reject empty, oversized, and non-string passwords', () => {
             checkValidator.isValidPassword('').should.be.false();
-            checkValidator.isValidPassword('a'.repeat(33)).should.be.false();
+            checkValidator.isValidPassword('a'.repeat(37)).should.be.false();
             checkValidator.isValidPassword(null).should.be.false();
             checkValidator.isValidPassword(123).should.be.false();
         });
