@@ -138,8 +138,133 @@
     pointer-events: auto;
 }
 
-.navbar button.video-drawing-pen-active {
+.navbar button.video-drawing-tool-active {
     color: #4caf50;
+}
+
+.video-drawing-text-input {
+    position: absolute;
+    z-index: 9;
+    box-sizing: border-box;
+    height: 34px;
+    padding: 6px 8px;
+    border: 2px solid #4caf50;
+    border-radius: 6px;
+    outline: none;
+    background: rgba(0, 0, 0, 0.86);
+    color: #fff;
+    font: 600 14px inherit;
+}
+
+.video-drawing-text-annotation {
+    --video-drawing-annotation-scale: 1;
+    position: absolute;
+    z-index: 8;
+    box-sizing: border-box;
+    min-height: calc(32px * var(--video-drawing-annotation-scale));
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: calc(6px * var(--video-drawing-annotation-scale));
+    background: rgba(0, 0, 0, 0.82);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.32);
+    color: #fff;
+    font-size: calc(14px * var(--video-drawing-annotation-scale));
+    font-weight: 600;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+}
+
+.video-drawing-text-content {
+    display: block;
+    padding: calc(7px * var(--video-drawing-annotation-scale)) calc(30px * var(--video-drawing-annotation-scale))
+        calc(7px * var(--video-drawing-annotation-scale)) calc(9px * var(--video-drawing-annotation-scale));
+}
+
+.video-drawing-text-annotation:not(.video-drawing-text-manageable) > .video-drawing-text-content {
+    padding-right: calc(9px * var(--video-drawing-annotation-scale));
+}
+
+.video-drawing-text-author {
+    position: absolute;
+    z-index: 1;
+    left: 0;
+    bottom: calc(100% + 4px);
+    width: max-content;
+    max-width: 200px;
+    padding: 4px 7px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.9);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: calc(11px * var(--video-drawing-annotation-scale));
+    font-weight: 500;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(2px);
+    transition:
+        opacity 0.15s ease,
+        transform 0.15s ease;
+}
+
+.video-drawing-text-author-below > .video-drawing-text-author {
+    top: calc(100% + 4px);
+    bottom: auto;
+}
+
+.video-drawing-text-author-align-right > .video-drawing-text-author {
+    right: 0;
+    left: auto;
+}
+
+.video-drawing-text-annotation:hover > .video-drawing-text-author,
+.video-drawing-text-annotation:focus-visible > .video-drawing-text-author,
+.video-drawing-text-annotation:focus-within > .video-drawing-text-author {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.video-drawing-text-annotation:hover,
+.video-drawing-text-annotation:focus-visible,
+.video-drawing-text-annotation:focus-within,
+.video-drawing-text-dragging {
+    z-index: 10;
+}
+
+.video-drawing-text-manageable {
+    cursor: grab;
+}
+
+.video-drawing-text-dragging {
+    cursor: grabbing;
+}
+
+.video-drawing-text-delete {
+    position: absolute;
+    top: calc(3px * var(--video-drawing-annotation-scale));
+    right: calc(3px * var(--video-drawing-annotation-scale));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: calc(24px * var(--video-drawing-annotation-scale));
+    height: calc(24px * var(--video-drawing-annotation-scale));
+    padding: 0;
+    border: 0;
+    border-radius: calc(4px * var(--video-drawing-annotation-scale));
+    background: transparent;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: calc(12px * var(--video-drawing-annotation-scale));
+    cursor: pointer;
+}
+
+.video-drawing-text-delete:hover,
+.video-drawing-text-delete:focus-visible {
+    background: rgba(255, 82, 82, 0.24);
+    color: #fff;
 }
 
 /* Dropdown overrides - must beat .navbar div */
