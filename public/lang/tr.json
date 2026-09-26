@@ -243,7 +243,10 @@
         "Transparency": "Transparency",
         "Undo": "Undo",
         "Unlock whiteboard": "Unlock whiteboard",
-        "Vanishing pen": "Vanishing pen"
+        "Vanishing pen": "Vanishing pen",
+        "Copy invite link": "Davet bağlantısını kopyala",
+        "Invite...": "Davet et...",
+        "Participant actions": "Katılımcı işlemleri"
     },
     "labels": {
         "= Arrow": "= Ok",
@@ -623,7 +626,7 @@
         "Time Limit Reached": "Süre sınırına ulaşıldı",
         "Unlock room?": "Oda kilidi açılsın mı?",
         "Username": "Kullanıcı adı",
-        "WebRTC P2P v2.0.16": "WebRTC P2P v2.0.16",
+        "WebRTC P2P v2.0.18": "WebRTC P2P v2.0.18",
         "Whiteboard Shortcuts": "Beyaz Tahta Kısayolları",
         "Yes": "Evet",
         "Schedule email invitation": "E-posta davetini planla",

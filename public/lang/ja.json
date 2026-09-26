@@ -243,7 +243,10 @@
         "Transparency": "Transparency",
         "Undo": "Undo",
         "Unlock whiteboard": "Unlock whiteboard",
-        "Vanishing pen": "Vanishing pen"
+        "Vanishing pen": "Vanishing pen",
+        "Copy invite link": "招待リンクをコピー",
+        "Invite...": "招待...",
+        "Participant actions": "参加者の操作"
     },
     "labels": {
         "= Arrow": "= 矢印",
@@ -623,7 +626,7 @@
         "Time Limit Reached": "制限時間に達しました",
         "Unlock room?": "ルームのロックを解除しますか？",
         "Username": "ユーザー名",
-        "WebRTC P2P v2.0.16": "WebRTC P2P v2.0.16",
+        "WebRTC P2P v2.0.18": "WebRTC P2P v2.0.18",
         "Whiteboard Shortcuts": "ホワイトボードのショートカット",
         "Yes": "はい",
         "Schedule email invitation": "メール招待をスケジュール",

@@ -243,7 +243,10 @@
         "Transparency": "Transparency",
         "Undo": "Undo",
         "Unlock whiteboard": "Unlock whiteboard",
-        "Vanishing pen": "Vanishing pen"
+        "Vanishing pen": "Vanishing pen",
+        "Copy invite link": "Einladungslink kopieren",
+        "Invite...": "Einladen...",
+        "Participant actions": "Teilnehmeraktionen"
     },
     "labels": {
         "= Arrow": "= Pfeil",
@@ -623,7 +626,7 @@
         "Time Limit Reached": "Zeitlimit erreicht",
         "Unlock room?": "Raum entsperren?",
         "Username": "Benutzername",
-        "WebRTC P2P v2.0.16": "WebRTC P2P v2.0.16",
+        "WebRTC P2P v2.0.18": "WebRTC P2P v2.0.18",
         "Whiteboard Shortcuts": "Whiteboard-Tastenkürzel",
         "Yes": "Ja",
         "Schedule email invitation": "E-Mail-Einladung planen",
