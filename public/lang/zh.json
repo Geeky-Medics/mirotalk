@@ -120,7 +120,26 @@
         "Arrow": "箭头",
         "Rectangle": "矩形",
         "Redo annotation": "重做批注",
-        "Undo annotation": "撤销批注"
+        "Undo annotation": "撤销批注",
+        "Bold text": "粗体文本",
+        "Cancel text annotation": "取消文本注释",
+        "Italic text": "斜体文本",
+        "More text options": "更多文本选项",
+        "Save text annotation": "保存文本注释",
+        "Strikethrough text": "删除线文本",
+        "Text": "Text",
+        "Text alignment: center. Click to cycle": "文本对齐方式：居中。点击循环",
+        "Text alignment: left. Click to cycle": "文本对齐方式：左。点击循环",
+        "Text alignment: right. Click to cycle": "文本对齐方式：右。点击循环",
+        "Text background": "文字背景",
+        "Text background color": "文本背景颜色",
+        "Text color": "文字颜色",
+        "Text rotation": "文本旋转",
+        "Text size": "文字大小",
+        "Underline text": "下划线文字",
+        "Diamond": "菱形",
+        "Download annotated screen (PDF)": "下载带批注的屏幕 (PDF)",
+        "Download annotated screen (PNG)": "下载带批注的屏幕 (PNG)"
     },
     "buttons": {
         "Add arrow": "添加箭头",
@@ -563,7 +582,12 @@
         "Room Emoji": "房间表情符号",
         "Screen text annotation": "屏幕文本批注",
         "Type annotation": "输入批注",
-        "Whiteboard": "白板"
+        "Whiteboard": "白板",
+        "Edit screen text annotation": "编辑屏幕文本注释",
+        "More text options": "更多文本选项",
+        "Screen annotation tools": "Screen annotation tools",
+        "Text formatting": "文本格式",
+        "Annotation downloads": "批注下载"
     },
     "dialogs": {
         "Edit frame title": "编辑框架标题",
@@ -626,7 +650,7 @@
         "Time Limit Reached": "已达到时间限制",
         "Unlock room?": "解锁房间？",
         "Username": "用户名",
-        "WebRTC P2P v2.0.38": "WebRTCP2Pv2.0.38",
+        "WebRTC P2P v2.0.42": "WebRTCP2Pv2.0.42",
         "Whiteboard Shortcuts": "白板快捷键",
         "Yes": "是",
         "Schedule email invitation": "安排电子邮件邀请",
@@ -764,6 +788,7 @@
         "Whisper transcription is not enabled on this server": "Whisper 此服务器上未启用转录",
         "Whisper transcription started": "Whisper转录开始",
         "Whisper transcription stopped": "Whisper 转录停止",
-        "Speech recognition started": "语音识别开始"
+        "Speech recognition started": "语音识别开始",
+        "Unable to download screen annotations": "无法下载屏幕批注"
     }
 }
