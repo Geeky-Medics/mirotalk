@@ -45,7 +45,7 @@ dependencies: {
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.0.30
+ * @version 2.0.38
  *
  */
 
@@ -2539,6 +2539,10 @@ io.sockets.on('connect', async (socket) => {
             tool,
             color,
             width,
+            fontSize,
+            bold,
+            italic,
+            boxWidth,
         } = config;
         if (!isPeerInRoom(room_id, socket.id) || !peers[room_id]?.[screenOwnerId]) return;
 
@@ -2651,21 +2655,57 @@ io.sockets.on('connect', async (socket) => {
             const roomAnnotations = (videoTextAnnotations[room_id] ||= new Map());
             const annotationKey = `${screenOwnerId}:${annotationId}`;
             const validPosition = Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= 1 && y >= 0 && y <= 1;
+            const getTextStyle = (fallback = {}) => {
+                const style = {
+                    color: color ?? fallback.color ?? '#ffffff',
+                    fontSize: fontSize ?? fallback.fontSize ?? 16,
+                    bold: bold ?? fallback.bold ?? false,
+                    italic: italic ?? fallback.italic ?? false,
+                    boxWidth: boxWidth ?? fallback.boxWidth ?? 0.35,
+                };
+                return typeof style.color === 'string' &&
+                    /^#[0-9a-f]{6}$/i.test(style.color) &&
+                    [12, 16, 20, 24, 32].includes(style.fontSize) &&
+                    typeof style.bold === 'boolean' &&
+                    typeof style.italic === 'boolean' &&
+                    Number.isFinite(style.boxWidth) &&
+                    style.boxWidth >= 0.15 &&
+                    style.boxWidth <= 0.8
+                    ? style
+                    : null;
+            };
 
-            if (action === 'create') {
+            if (action === 'create' || action === 'restore') {
+                const restoring = action === 'restore';
+                const validDrawerId = typeof drawerId === 'string' && drawerId.length > 0 && drawerId.length <= 100;
+                const textStyle = getTextStyle();
                 if (
+                    (restoring && (socket.id !== screenOwnerId || !validDrawerId)) ||
                     typeof text !== 'string' ||
                     text.length === 0 ||
-                    text.length > 80 ||
+                    text.length > 1000 ||
+                    !textStyle ||
                     !validPosition ||
                     roomAnnotations.has(annotationKey) ||
                     roomAnnotations.size >= 200
                 ) {
                     return;
                 }
-                const annotation = { annotationId, drawerId: socket.id, screenOwnerId, text, x, y };
+                const annotation = {
+                    annotationId,
+                    drawerId: restoring ? drawerId : socket.id,
+                    screenOwnerId,
+                    text,
+                    x,
+                    y,
+                    ...textStyle,
+                };
                 roomAnnotations.set(annotationKey, annotation);
-                await sendToRoom(room_id, socket.id, 'videoDrawing', { type: 'text', action, ...annotation });
+                await sendToRoom(room_id, socket.id, 'videoDrawing', {
+                    type: 'text',
+                    action: 'create',
+                    ...annotation,
+                });
                 return;
             }
 
@@ -2680,6 +2720,20 @@ io.sockets.on('connect', async (socket) => {
 
             const annotation = roomAnnotations.get(annotationKey);
             if (!annotation || (socket.id !== annotation.drawerId && socket.id !== screenOwnerId)) return;
+            if (action === 'update') {
+                const textStyle = getTextStyle(annotation);
+                if (typeof text !== 'string' || text.length === 0 || text.length > 1000 || !textStyle) return;
+                Object.assign(annotation, { text, ...textStyle });
+                await sendToRoom(room_id, socket.id, 'videoDrawing', {
+                    type: 'text',
+                    action,
+                    screenOwnerId,
+                    annotationId,
+                    text,
+                    ...textStyle,
+                });
+                return;
+            }
             if (action === 'move') {
                 if (!validPosition) return;
                 annotation.x = x;

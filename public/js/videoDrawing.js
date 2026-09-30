@@ -10,6 +10,7 @@ class VideoDrawingOverlay {
     static AUTO_CLEAR_MS = 5000;
     static SYNC_INTERVAL_MS = 50;
     static BRUSH_COLOR = 'rgba(255, 255, 0, 0.85)';
+    static MAX_TEXT_LENGTH = 1000;
 
     constructor(screenOwnerId, screenWrap, video) {
         this.screenOwnerId = screenOwnerId;
@@ -88,11 +89,11 @@ class VideoDrawingOverlay {
         this.render();
     }
 
-    bindControls(drawingButton, textButton) {
+    bindControls(drawingButton) {
         this.drawingButton = drawingButton;
-        this.textButton = textButton;
         this.color = '#ffeb3b';
         this.width = 0.004;
+        this.textStyle = { color: '#ffffff', fontSize: 16, bold: false, italic: false, boxWidth: 0.35 };
         this.lastDrawingTool = 'pencil';
         const translateTooltip = (label) => window.i18n?.t(label, 'tooltips') || label;
         const setTranslatedAttribute = (element, attribute, label, namespace) => {
@@ -111,6 +112,7 @@ class VideoDrawingOverlay {
             'Circle',
             'Rectangle',
             'Arrow',
+            'Text',
             'Select and move',
             'Annotation color',
             'Annotation width',
@@ -143,6 +145,7 @@ class VideoDrawingOverlay {
             ['circle', 'far fa-circle', 'Circle'],
             ['rectangle', 'far fa-square', 'Rectangle'],
             ['arrow', 'fas fa-arrow-right-long', 'Arrow'],
+            ['text', 'fas fa-font', 'Text'],
             ['select', 'fas fa-mouse-pointer', 'Select and move'],
         ];
         this.toolButtons = {};
@@ -258,12 +261,10 @@ class VideoDrawingOverlay {
         this.bindToolbarDrag(toolbar, dragHandle);
 
         drawingButton.addEventListener('click', () => {
-            const isDrawingTool = this.isActive && this.tool !== 'text';
-            if (isDrawingTool && this.isToolbarCollapsed) this.setToolbarCollapsed(false);
-            const tool = isDrawingTool ? null : this.lastDrawingTool;
+            if (this.isActive && this.isToolbarCollapsed) this.setToolbarCollapsed(false);
+            const tool = this.isActive ? null : this.lastDrawingTool;
             this.setTool(tool);
         });
-        textButton.addEventListener('click', () => this.setTool(this.isActive && this.tool === 'text' ? null : 'text'));
     }
 
     createToolbarGroup(label, setTranslatedAttribute) {
@@ -367,33 +368,27 @@ class VideoDrawingOverlay {
     }
 
     updateModeButtons() {
-        const isDrawingTool = this.isActive && this.tool !== 'text';
-        for (const [button, selected, label] of [
-            [this.drawingButton, isDrawingTool, 'screen drawing'],
-            [this.textButton, this.isActive && this.tool === 'text', 'screen text'],
-        ]) {
-            button.classList.toggle('video-drawing-tool-active', selected);
-            button.setAttribute('aria-pressed', String(selected));
-            const accessibleLabel = `${selected ? 'Disable' : 'Enable'} ${label}`;
-            const translatedLabel = window.i18n?.t(accessibleLabel, 'tooltips') || accessibleLabel;
-            button['__i18nAttr_aria-label'] = accessibleLabel;
-            button.setAttribute('aria-label', translatedLabel);
-            if (button._tippy) {
-                button._tippy.__i18nSrc = accessibleLabel;
-                button._tippy.setContent(translatedLabel);
-            }
+        const selected = this.isActive;
+        this.drawingButton.classList.toggle('video-drawing-tool-active', selected);
+        this.drawingButton.setAttribute('aria-pressed', String(selected));
+        const accessibleLabel = `${selected ? 'Disable' : 'Enable'} screen drawing`;
+        const translatedLabel = window.i18n?.t(accessibleLabel, 'tooltips') || accessibleLabel;
+        this.drawingButton['__i18nAttr_aria-label'] = accessibleLabel;
+        this.drawingButton.setAttribute('aria-label', translatedLabel);
+        if (this.drawingButton._tippy) {
+            this.drawingButton._tippy.__i18nSrc = accessibleLabel;
+            this.drawingButton._tippy.setContent(translatedLabel);
         }
     }
 
     setTool(tool) {
         this.isActive = Boolean(tool);
         this.tool = tool;
-        const isDrawingTool = this.isActive && tool !== 'text';
         this.canvas.classList.toggle('video-drawing-active', this.isActive);
         this.canvas.classList.toggle('video-drawing-selecting', tool === 'select');
-        this.toolbar.classList.toggle('video-drawing-toolbar-active', isDrawingTool);
+        this.toolbar.classList.toggle('video-drawing-toolbar-active', this.isActive);
         for (const [buttonTool, button] of Object.entries(this.toolButtons)) {
-            const selected = isDrawingTool && buttonTool === tool;
+            const selected = this.isActive && buttonTool === tool;
             button.classList.toggle('video-drawing-tool-active', selected);
             button.setAttribute('aria-pressed', String(selected));
         }
@@ -549,12 +544,70 @@ class VideoDrawingOverlay {
         };
     }
 
-    beginTextInput(event) {
+    beginTextInput(event, annotation = null) {
         this.textInput?.remove();
-        const point = this.getPoint(event);
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.maxLength = 80;
+        const point = annotation ? { x: annotation.x, y: annotation.y } : this.getPoint(event);
+        const initialStyle = this.getTextStyle(annotation || this.textStyle);
+        const editor = document.createElement('div');
+        editor.className = 'video-drawing-text-editor';
+        editor.setAttribute('role', 'dialog');
+        editor.setAttribute('aria-label', 'Edit screen text annotation');
+
+        const controls = document.createElement('div');
+        controls.className = 'video-drawing-text-editor-controls';
+
+        const createToggle = (className, label, selected) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = className;
+            button.setAttribute('aria-label', label);
+            button.setAttribute('aria-pressed', String(selected));
+            button.addEventListener('click', () => {
+                button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true'));
+                updatePreview();
+                input.focus();
+            });
+            return button;
+        };
+
+        const bold = createToggle('fas fa-bold', 'Bold text', initialStyle.bold);
+        const italic = createToggle('fas fa-italic', 'Italic text', initialStyle.italic);
+        controls.append(bold, italic);
+
+        const textColor = document.createElement('input');
+        textColor.type = 'color';
+        textColor.value = initialStyle.color;
+        textColor.className = 'video-drawing-text-color';
+        textColor.setAttribute('aria-label', 'Text color');
+        controls.appendChild(textColor);
+
+        const fontSize = document.createElement('select');
+        fontSize.className = 'video-drawing-text-size';
+        fontSize.setAttribute('aria-label', 'Text size');
+        for (const size of [12, 16, 20, 24, 32]) {
+            const option = document.createElement('option');
+            option.value = String(size);
+            option.textContent = `${size}px`;
+            option.selected = size === initialStyle.fontSize;
+            fontSize.appendChild(option);
+        }
+        controls.appendChild(fontSize);
+
+        const cancelButton = document.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'video-drawing-text-cancel fas fa-times';
+        cancelButton.setAttribute('aria-label', 'Cancel text annotation');
+        controls.appendChild(cancelButton);
+
+        const saveButton = document.createElement('button');
+        saveButton.type = 'button';
+        saveButton.className = 'video-drawing-text-save fas fa-check';
+        saveButton.setAttribute('aria-label', 'Save text annotation');
+        controls.appendChild(saveButton);
+
+        const input = document.createElement('textarea');
+        input.maxLength = VideoDrawingOverlay.MAX_TEXT_LENGTH;
+        input.rows = 3;
         input.className = 'video-drawing-text-input';
         const placeholder = 'Type annotation';
         const ariaLabel = 'Screen text annotation';
@@ -562,52 +615,103 @@ class VideoDrawingOverlay {
         input['__i18nAttr_aria-label'] = ariaLabel;
         input.placeholder = window.i18n?.t(placeholder, 'labels') || placeholder;
         input.setAttribute('aria-label', window.i18n?.t(ariaLabel, 'labels') || ariaLabel);
+        const updatePreview = () => {
+            input.style.color = textColor.value;
+            input.style.fontSize = `${fontSize.value}px`;
+            input.style.fontWeight = bold.getAttribute('aria-pressed') === 'true' ? '700' : '500';
+            input.style.fontStyle = italic.getAttribute('aria-pressed') === 'true' ? 'italic' : 'normal';
+        };
+        textColor.addEventListener('input', updatePreview);
+        fontSize.addEventListener('change', updatePreview);
         const canvasWidth = this.canvas.clientWidth;
         const canvasHeight = this.canvas.clientHeight;
-        const inputWidth = Math.min(240, Math.max(40, canvasWidth - 16));
+        const inputWidth = Math.min(
+            canvasWidth - 16,
+            Math.max(160, annotation ? initialStyle.boxWidth * canvasWidth : Math.min(320, canvasWidth * 0.45))
+        );
         const inputLeft = Math.min(point.x * canvasWidth, canvasWidth - inputWidth - 8);
-        const inputTop = Math.min(point.y * canvasHeight, canvasHeight - 42);
-        input.style.left = `${this.canvas.offsetLeft + Math.max(8, inputLeft)}px`;
-        input.style.top = `${this.canvas.offsetTop + Math.max(8, inputTop)}px`;
-        input.style.width = `${inputWidth}px`;
-        this.screenWrap.appendChild(input);
-        this.textInput = input;
+        const inputTop = Math.min(point.y * canvasHeight, canvasHeight - 150);
+        editor.style.left = `${this.canvas.offsetLeft + Math.max(8, inputLeft)}px`;
+        editor.style.top = `${this.canvas.offsetTop + Math.max(8, inputTop)}px`;
+        editor.style.width = `${inputWidth}px`;
+        editor.style.maxWidth = `${Math.max(160, canvasWidth - inputLeft - 8)}px`;
+        input.value = annotation?.text || '';
+        updatePreview();
+        editor.append(controls, input);
+        this.screenWrap.appendChild(editor);
+        this.textInput = editor;
+        annotation?.element.classList.add('video-drawing-text-editing');
 
         let finished = false;
         const finish = (commit) => {
             if (finished) return;
             finished = true;
             const text = input.value.trim();
-            input.remove();
-            if (this.textInput === input) this.textInput = null;
+            const style = this.getTextStyle({
+                color: textColor.value,
+                fontSize: Number(fontSize.value),
+                bold: bold.getAttribute('aria-pressed') === 'true',
+                italic: italic.getAttribute('aria-pressed') === 'true',
+                boxWidth: editor.offsetWidth / canvasWidth,
+            });
+            editor.remove();
+            if (this.textInput === editor) this.textInput = null;
+            annotation?.element.classList.remove('video-drawing-text-editing');
             if (!commit || !text) return;
 
-            const annotation = {
+            if (annotation) {
+                const previousAnnotation = this.cloneTextAnnotation(annotation);
+                const nextAnnotation = { ...previousAnnotation, text, ...style };
+                if (JSON.stringify(previousAnnotation) === JSON.stringify(nextAnnotation)) return;
+                this.updateTextAnnotation(annotation.annotationId, nextAnnotation);
+                this.recordHistory(
+                    [{ type: 'text', action: 'update', ...previousAnnotation }],
+                    [{ type: 'text', action: 'update', ...nextAnnotation }]
+                );
+                VideoDrawingOverlay.onEmitDrawing?.({
+                    type: 'text',
+                    action: 'update',
+                    screenOwnerId: this.screenOwnerId,
+                    ...nextAnnotation,
+                });
+                return;
+            }
+
+            const newAnnotation = {
                 type: 'text',
                 annotationId: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
                 drawerId: VideoDrawingOverlay.getLocalDrawerId?.(),
                 text,
+                ...style,
                 ...point,
             };
-            this.addTextAnnotation(annotation);
+            this.textStyle = style;
+            this.addTextAnnotation(newAnnotation);
+            this.recordHistory(
+                [{ type: 'text', action: 'delete', annotationId: newAnnotation.annotationId }],
+                [{ type: 'text', action: 'create', annotation: this.cloneTextAnnotation(newAnnotation) }]
+            );
             VideoDrawingOverlay.onEmitDrawing?.({
                 type: 'text',
                 action: 'create',
                 screenOwnerId: this.screenOwnerId,
-                annotationId: annotation.annotationId,
+                annotationId: newAnnotation.annotationId,
                 text,
+                ...style,
                 x: Number(point.x.toFixed(4)),
                 y: Number(point.y.toFixed(4)),
             });
         };
 
         input.addEventListener('keydown', (inputEvent) => {
-            if (inputEvent.key === 'Enter') finish(true);
+            if (inputEvent.key === 'Enter' && (inputEvent.metaKey || inputEvent.ctrlKey)) finish(true);
             if (inputEvent.key === 'Escape') finish(false);
             inputEvent.stopPropagation();
         });
-        input.addEventListener('blur', () => finish(true));
+        saveButton.addEventListener('click', () => finish(true));
+        cancelButton.addEventListener('click', () => finish(false));
         input.focus();
+        input.select();
     }
 
     scheduleSync(end) {
@@ -652,6 +756,7 @@ class VideoDrawingOverlay {
 
     addTextAnnotation(annotation) {
         if (!annotation.annotationId || this.textAnnotations.has(annotation.annotationId)) return;
+        Object.assign(annotation, this.getTextStyle(annotation));
         const element = document.createElement('div');
         element.className = 'video-drawing-text-annotation';
         element.setAttribute('role', 'note');
@@ -663,6 +768,8 @@ class VideoDrawingOverlay {
         text.className = 'video-drawing-text-content';
         text.textContent = annotation.text;
         element.appendChild(text);
+        annotation.element = element;
+        this.applyTextAnnotationStyle(annotation);
 
         const author = document.createElement('span');
         author.className = 'video-drawing-text-author';
@@ -672,12 +779,23 @@ class VideoDrawingOverlay {
         author.append(authorLabelNode, document.createTextNode(` ${drawerName}`));
         element.appendChild(author);
 
-        annotation.element = element;
         this.textAnnotations.set(annotation.annotationId, annotation);
         this.screenWrap.appendChild(element);
 
         if (this.canManageTextAnnotation(annotation)) {
             element.classList.add('video-drawing-text-manageable');
+            const editButton = document.createElement('button');
+            editButton.type = 'button';
+            editButton.className = 'video-drawing-text-edit fas fa-pen';
+            const editLabel = 'Edit text annotation';
+            editButton['__i18nAttr_aria-label'] = editLabel;
+            editButton.setAttribute('aria-label', window.i18n?.t(editLabel, 'buttons') || editLabel);
+            editButton.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this.beginTextInput(event, annotation);
+            });
+            element.appendChild(editButton);
+
             const deleteButton = document.createElement('button');
             deleteButton.type = 'button';
             deleteButton.className = 'video-drawing-text-delete fas fa-times';
@@ -686,7 +804,12 @@ class VideoDrawingOverlay {
             deleteButton.setAttribute('aria-label', window.i18n?.t(deleteLabel, 'buttons') || deleteLabel);
             deleteButton.addEventListener('click', (event) => {
                 event.stopPropagation();
+                const snapshot = this.cloneTextAnnotation(annotation);
                 this.deleteTextAnnotation(annotation.annotationId);
+                this.recordHistory(
+                    [{ type: 'text', action: 'create', annotation: snapshot }],
+                    [{ type: 'text', action: 'delete', annotationId: annotation.annotationId }]
+                );
                 VideoDrawingOverlay.onEmitDrawing?.({
                     type: 'text',
                     action: 'delete',
@@ -695,6 +818,11 @@ class VideoDrawingOverlay {
                 });
             });
             element.appendChild(deleteButton);
+            element.addEventListener('keydown', (event) => {
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                this.beginTextInput(event, annotation);
+            });
             this.bindTextDrag(annotation);
         }
 
@@ -718,6 +846,8 @@ class VideoDrawingOverlay {
                 pointerId: event.pointerId,
                 offsetX: event.clientX - rect.left,
                 offsetY: event.clientY - rect.top,
+                originalX: annotation.x,
+                originalY: annotation.y,
             };
             element.setPointerCapture(event.pointerId);
             element.classList.add('video-drawing-text-dragging');
@@ -740,8 +870,22 @@ class VideoDrawingOverlay {
         });
         const finishDrag = (event) => {
             if (!drag || drag.pointerId !== event.pointerId) return;
+            const { originalX, originalY } = drag;
             drag = null;
             element.classList.remove('video-drawing-text-dragging');
+            if (originalX === annotation.x && originalY === annotation.y) return;
+            this.recordHistory(
+                [{ type: 'text', action: 'move', annotationId: annotation.annotationId, x: originalX, y: originalY }],
+                [
+                    {
+                        type: 'text',
+                        action: 'move',
+                        annotationId: annotation.annotationId,
+                        x: annotation.x,
+                        y: annotation.y,
+                    },
+                ]
+            );
             VideoDrawingOverlay.onEmitDrawing?.({
                 type: 'text',
                 action: 'move',
@@ -761,6 +905,37 @@ class VideoDrawingOverlay {
         annotation.x = x;
         annotation.y = y;
         this.positionTextAnnotation(annotation);
+    }
+
+    updateTextAnnotation(annotationId, data) {
+        const annotation = this.textAnnotations.get(annotationId);
+        if (!annotation) return;
+        annotation.text = data.text;
+        Object.assign(annotation, this.getTextStyle(data));
+        annotation.element.querySelector('.video-drawing-text-content').textContent = data.text;
+        this.applyTextAnnotationStyle(annotation);
+        this.positionTextAnnotation(annotation);
+    }
+
+    getTextStyle(source = {}) {
+        const validColor = typeof source.color === 'string' && /^#[0-9a-f]{6}$/i.test(source.color);
+        const fontSize = [12, 16, 20, 24, 32].includes(Number(source.fontSize)) ? Number(source.fontSize) : 16;
+        const boxWidth = Number.isFinite(Number(source.boxWidth)) ? Number(source.boxWidth) : 0.35;
+        return {
+            color: validColor ? source.color : '#ffffff',
+            fontSize,
+            bold: source.bold === true,
+            italic: source.italic === true,
+            boxWidth: Math.max(0.15, Math.min(0.8, boxWidth)),
+        };
+    }
+
+    applyTextAnnotationStyle(annotation) {
+        const { element } = annotation;
+        element.style.setProperty('--video-drawing-text-color', annotation.color);
+        element.style.setProperty('--video-drawing-text-size', annotation.fontSize);
+        element.classList.toggle('video-drawing-text-bold', annotation.bold);
+        element.classList.toggle('video-drawing-text-italic', annotation.italic);
     }
 
     deleteTextAnnotation(annotationId) {
@@ -784,7 +959,9 @@ class VideoDrawingOverlay {
         const canvasHeight = this.canvas.clientHeight;
         const annotationScale = Math.max(0.5, Math.min(1, canvasWidth / 640, canvasHeight / 360));
         annotation.element.style.setProperty('--video-drawing-annotation-scale', annotationScale);
-        annotation.element.style.maxWidth = `${Math.max(1, Math.min(280 * annotationScale, canvasWidth - 16))}px`;
+        annotation.element.style.fontSize = `${annotation.fontSize * annotationScale}px`;
+        annotation.element.style.width = 'max-content';
+        annotation.element.style.maxWidth = `${Math.max(80, Math.min(annotation.boxWidth * canvasWidth, canvasWidth - 16))}px`;
         const x = Math.min(annotation.x * canvasWidth, Math.max(0, canvasWidth - annotation.element.offsetWidth));
         const y = Math.min(annotation.y * canvasHeight, Math.max(0, canvasHeight - annotation.element.offsetHeight));
         annotation.element.classList.toggle('video-drawing-text-author-below', annotation.y < 0.15);
@@ -795,6 +972,7 @@ class VideoDrawingOverlay {
 
     receiveText(data) {
         if (data.action === 'move') this.moveTextAnnotation(data.annotationId, data.x, data.y);
+        else if (data.action === 'update') this.updateTextAnnotation(data.annotationId, data);
         else if (data.action === 'delete') this.deleteTextAnnotation(data.annotationId);
         else if (data.action === 'clear') this.clearTextAnnotations();
         else this.addTextAnnotation(data);
@@ -888,6 +1066,18 @@ class VideoDrawingOverlay {
         };
     }
 
+    cloneTextAnnotation(annotation) {
+        return {
+            type: 'text',
+            annotationId: annotation.annotationId,
+            drawerId: annotation.drawerId,
+            text: annotation.text,
+            x: annotation.x,
+            y: annotation.y,
+            ...this.getTextStyle(annotation),
+        };
+    }
+
     recordHistory(undoCommands, redoCommands) {
         this.undoStack.push({ undoCommands, redoCommands });
         if (this.undoStack.length > 50) this.undoStack.shift();
@@ -917,6 +1107,10 @@ class VideoDrawingOverlay {
     }
 
     executeHistoryCommand(command) {
+        if (command.type === 'text') {
+            this.executeTextHistoryCommand(command);
+            return;
+        }
         if (command.action === 'create') {
             const annotation = this.cloneAnnotation(command.annotation);
             this.receiveAnnotation({ action: 'create', ...annotation });
@@ -944,6 +1138,50 @@ class VideoDrawingOverlay {
         this.receiveAnnotation({ action: 'delete', annotationId: command.annotationId });
         VideoDrawingOverlay.onEmitDrawing?.({
             type: 'annotation',
+            action: 'delete',
+            screenOwnerId: this.screenOwnerId,
+            annotationId: command.annotationId,
+        });
+    }
+
+    executeTextHistoryCommand(command) {
+        if (command.action === 'create') {
+            const annotation = this.cloneTextAnnotation(command.annotation);
+            this.receiveText({ action: 'create', ...annotation });
+            const localDrawerId = VideoDrawingOverlay.getLocalDrawerId?.();
+            VideoDrawingOverlay.onEmitDrawing?.({
+                type: 'text',
+                action: annotation.drawerId === localDrawerId ? 'create' : 'restore',
+                screenOwnerId: this.screenOwnerId,
+                ...annotation,
+            });
+            return;
+        }
+        if (command.action === 'move') {
+            this.receiveText(command);
+            VideoDrawingOverlay.onEmitDrawing?.({
+                type: 'text',
+                action: 'move',
+                screenOwnerId: this.screenOwnerId,
+                annotationId: command.annotationId,
+                x: command.x,
+                y: command.y,
+            });
+            return;
+        }
+        if (command.action === 'update') {
+            this.receiveText(command);
+            VideoDrawingOverlay.onEmitDrawing?.({
+                type: 'text',
+                action: 'update',
+                screenOwnerId: this.screenOwnerId,
+                ...command,
+            });
+            return;
+        }
+        this.receiveText({ action: 'delete', annotationId: command.annotationId });
+        VideoDrawingOverlay.onEmitDrawing?.({
+            type: 'text',
             action: 'delete',
             screenOwnerId: this.screenOwnerId,
             annotationId: command.annotationId,
@@ -991,11 +1229,19 @@ class VideoDrawingOverlay {
         const clearAll = forceClearAll || (emit && localDrawerId === this.screenOwnerId);
         const targetDrawerId = drawerId || localDrawerId;
         const removedAnnotations = [];
+        const removedTextAnnotations = [];
         for (const [annotationId, annotation] of this.annotations) {
             if (clearAll || annotation.drawerId === targetDrawerId) {
                 if (emit) removedAnnotations.push(this.cloneAnnotation(annotation));
                 this.clearDrawerNameTimer(annotationId);
                 this.annotations.delete(annotationId);
+            }
+        }
+        for (const [annotationId, annotation] of this.textAnnotations) {
+            if (clearAll || annotation.drawerId === targetDrawerId) {
+                if (emit) removedTextAnnotations.push(this.cloneTextAnnotation(annotation));
+                annotation.element.remove();
+                this.textAnnotations.delete(annotationId);
             }
         }
         if (!this.annotations.has(this.selectedAnnotationId)) this.selectAnnotation(null);
@@ -1006,10 +1252,36 @@ class VideoDrawingOverlay {
                 action: 'clear',
                 screenOwnerId: this.screenOwnerId,
             });
-            if (removedAnnotations.length) {
+            if (clearAll) {
+                VideoDrawingOverlay.onEmitDrawing?.({
+                    type: 'text',
+                    action: 'clear',
+                    screenOwnerId: this.screenOwnerId,
+                });
+            } else {
+                for (const annotation of removedTextAnnotations) {
+                    VideoDrawingOverlay.onEmitDrawing?.({
+                        type: 'text',
+                        action: 'delete',
+                        screenOwnerId: this.screenOwnerId,
+                        annotationId: annotation.annotationId,
+                    });
+                }
+            }
+            if (removedAnnotations.length || removedTextAnnotations.length) {
                 this.recordHistory(
-                    removedAnnotations.map((annotation) => ({ action: 'create', annotation })),
-                    removedAnnotations.map(({ annotationId }) => ({ action: 'delete', annotationId }))
+                    [
+                        ...removedAnnotations.map((annotation) => ({ action: 'create', annotation })),
+                        ...removedTextAnnotations.map((annotation) => ({ type: 'text', action: 'create', annotation })),
+                    ],
+                    [
+                        ...removedAnnotations.map(({ annotationId }) => ({ action: 'delete', annotationId })),
+                        ...removedTextAnnotations.map(({ annotationId }) => ({
+                            type: 'text',
+                            action: 'delete',
+                            annotationId,
+                        })),
+                    ]
                 );
             }
         }
