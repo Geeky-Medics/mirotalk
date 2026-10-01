@@ -155,6 +155,23 @@
     cursor: default;
 }
 
+.video-drawing-annotations-hidden .video-drawing-canvas,
+.video-drawing-annotations-hidden .video-drawing-text-annotation,
+.video-drawing-readonly .video-drawing-text-annotation > button {
+    display: none !important;
+}
+
+.video-drawing-erasing .video-drawing-text-annotation,
+.video-drawing-erasing .video-drawing-text-annotation *,
+.video-drawing-readonly .video-drawing-text-annotation,
+.video-drawing-readonly .video-drawing-text-annotation * {
+    pointer-events: none !important;
+}
+
+.video-drawing-erasing .video-drawing-canvas {
+    cursor: cell;
+}
+
 .navbar button.video-drawing-tool-active {
     color: #4caf50;
 }
@@ -234,6 +251,10 @@
     color: #4caf50;
 }
 
+.video-drawing-toolbar button.fa-lock {
+    color: #ef5350;
+}
+
 .video-drawing-toolbar button:disabled {
     color: rgba(255, 255, 255, 0.3);
     cursor: not-allowed;
@@ -274,6 +295,19 @@
 .video-drawing-color::-webkit-color-swatch {
     border: 1px solid rgba(255, 255, 255, 0.5);
     border-radius: 3px;
+}
+
+.video-drawing-swatch span {
+    box-sizing: border-box;
+    width: 18px;
+    height: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+}
+
+.video-drawing-swatch[aria-pressed='true'] span {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
 }
 
 .video-drawing-width {
