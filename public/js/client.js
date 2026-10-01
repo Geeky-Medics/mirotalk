@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.0.45
+ * @version 2.0.47
  *
  */
 
@@ -17676,7 +17676,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.0.45',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.0.47',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
@@ -18335,12 +18335,9 @@ function disable(elem, disabled) {
  */
 function restoreSplitButtonsBorderRadius() {
     // On mobile we skip dropdown behavior, but ensure split buttons still look rounded.
-    document.querySelectorAll('#bottomButtons .split-btn').forEach((group) => {
+    document.querySelectorAll('#bottomButtons #audioSplit, #bottomButtons #videoSplit').forEach((group) => {
         group.querySelectorAll('button').forEach((button) => {
-            // Hack: Exclude settingsExtraToggle extra buttons...
-            if (button.id != 'settingsExtraToggle' && button.id != 'mySettingsBtn') {
-                button.style.setProperty('border-radius', '10px', 'important');
-            }
+            button.style.setProperty('border-radius', '10px', 'important');
         });
         const toggle = group.querySelector('.device-dropdown-toggle');
         if (toggle) toggle.style.setProperty('border-left', 'none', 'important');
