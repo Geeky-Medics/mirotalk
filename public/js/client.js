@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.0.70
+ * @version 2.0.81
  *
  */
 
@@ -426,6 +426,7 @@ const initBackgroundEffectLoading = getId('initBackgroundEffectLoading');
 const initBackgroundError = getId('initBackgroundError');
 let cameraEffects = null;
 let backgroundImage = null;
+let backgroundImageFile = null;
 let backgroundEffectsBusy = false;
 const videoFpsSelect = getId('videoFps');
 const videoFpsDiv = getId('videoFpsDiv');
@@ -2151,7 +2152,7 @@ async function whoAreYou() {
         inputValue: window.localStorage.peer_name ? window.localStorage.peer_name : '',
         html: initUser, // inject html
         confirmButtonText: `Join meeting`,
-        customClass: { popup: 'init-modal-size' },
+        customClass: { popup: 'init-modal-size', confirmButton: 'init-join-button' },
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
         willOpen: () => {
@@ -2404,6 +2405,11 @@ function updateBackgroundControls() {
         select.disabled = disabled;
     }
     for (const input of [backgroundImageInput, initBackgroundImageInput]) {
+        if (backgroundImageFile && input.files[0] !== backgroundImageFile) {
+            const transfer = new DataTransfer();
+            transfer.items.add(backgroundImageFile);
+            input.files = transfer.files;
+        }
         input.disabled = disabled;
         input.hidden = backgroundEffectSelect.value !== 'image';
     }
@@ -2514,6 +2520,7 @@ async function loadCameraBackgroundImage(event) {
     setBackgroundError();
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) {
         input.value = '';
+        updateBackgroundControls();
         setBackgroundError('Choose a PNG, JPEG or WebP image up to 10 MB.');
         return;
     }
@@ -2528,8 +2535,10 @@ async function loadCameraBackgroundImage(event) {
             image.src = url;
         });
         backgroundImage = image;
+        backgroundImageFile = file;
         await applyCameraBackground();
     } catch (error) {
+        input.value = '';
         console.error('Unable to load background image', error);
         setBackgroundError('Unable to load background image.');
     } finally {
@@ -3814,6 +3823,7 @@ let themeMap = {
         '--btn-bar-color': '#121214',
         '--btns-bg-color': 'rgba(18, 18, 20, 0.75)',
         '--dd-color': '#E8E8EC',
+        '--swal-confirm-bg': '#315bd6',
         '--toggle-off-bg': '#000000',
         '--toggle-on-bg': 'green',
         '--toggle-on-ink': '#FFFFFF',
@@ -3960,6 +3970,7 @@ function applyThemeVars(vars) {
     setSP('--toggle-on-bg', vars['--toggle-on-bg'] || vars['--dd-color'] || 'green');
     setSP('--toggle-off-ink', vars['--toggle-off-ink'] || '#FFFFFF');
     setSP('--toggle-on-ink', vars['--toggle-on-ink'] || vars['--btn-bar-color'] || '#FFFFFF');
+    setSwalTheme(vars);
     document.body.style.background = vars['--body-bg'];
 }
 
@@ -3989,6 +4000,7 @@ function setCustomTheme() {
         '--toggle-off-bg': `color-mix(in srgb, ${color} 55%, black)`,
         '--toggle-on-bg': `color-mix(in srgb, ${color} 55%, white)`,
         '--toggle-on-ink': '#101314',
+        '--swal-neutral-bg': `color-mix(in srgb, ${color} 55%, black)`,
     });
 }
 
@@ -5145,6 +5157,7 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
             // remote peer kick out
             remotePeerKickOut.setAttribute('id', peer_id + '_kickOut');
             remotePeerKickOut.className = className.kickOut;
+            remotePeerKickOut.setAttribute('aria-label', 'Eject participant');
 
             // remote video zoomIn/Out
             remoteVideoZoomInBtn.setAttribute('id', peer_id + 'videoZoomIn');
@@ -5259,7 +5272,7 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
                 );
             buttons.remote.showKickOutBtn &&
                 remoteDropdownContent.appendChild(
-                    createDropdownItem(remotePeerKickOut, 'Kick Out', remoteDropdownContent, 'red')
+                    createDropdownItem(remotePeerKickOut, 'Eject participant', remoteDropdownContent, 'red')
                 );
 
             remoteDropdownDiv.appendChild(remoteDropdownBtn);
@@ -7656,9 +7669,9 @@ function confirmTranscriptionStartWithAudioOff() {
         imageUrl: images.caption,
         title: 'Your microphone is off',
         text: 'Transcription needs your microphone on to capture your speech. Turn it on to start transcribing.',
-        showDenyButton: true,
+        showCancelButton: true,
         confirmButtonText: 'Turn on microphone',
-        denyButtonText: 'Cancel',
+        cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -8805,6 +8818,8 @@ function setupMySettings() {
         });
     }
 
+    let isSelectingParticipantView = false;
+
     function openParticipantViewMenu() {
         participantViewButton._tippy?.hide();
         participantViewButton._tippy?.disable();
@@ -8823,13 +8838,19 @@ function setupMySettings() {
         participantViewMenu.classList.contains('show') ? closeParticipantViewMenu() : openParticipantViewMenu();
     });
     participantViewMenu.addEventListener('click', (e) => {
+        e.stopPropagation();
         const viewButton = e.target.closest('[data-participant-view]');
         if (!viewButton) return;
-        setParticipantViewMode(viewButton.dataset.participantView);
-        closeParticipantViewMenu();
+        isSelectingParticipantView = true;
+        try {
+            setParticipantViewMode(viewButton.dataset.participantView);
+        } finally {
+            isSelectingParticipantView = false;
+        }
     });
     document.addEventListener('click', (e) => {
-        if (!participantViewDropdown.contains(e.target)) {
+        // Layout changes trigger pin/unpin clicks outside the dropdown.
+        if (!isSelectingParticipantView && !participantViewDropdown.contains(e.target)) {
             closeParticipantViewMenu();
         }
     });
@@ -9630,8 +9651,7 @@ function shareRoomMeetingURL(checkScreen = false) {
         }),
         showDenyButton: true,
         showCancelButton: true,
-        cancelButtonColor: 'red',
-        denyButtonColor: 'green',
+        reverseButtons: true,
         confirmButtonText: `Copy URL`,
         denyButtonText: `Email invite`,
         cancelButtonText: `Close`,
@@ -9724,7 +9744,6 @@ function shareRoomByEmail() {
         `,
         showCancelButton: true,
         confirmButtonText: translateDialogText('Open email'),
-        cancelButtonColor: 'red',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
         preConfirm: () => {
@@ -11589,9 +11608,11 @@ function cleanMessages() {
         title: 'Chat',
         text: 'Clean up chat messages?',
         imageUrl: images.delete,
-        showDenyButton: true,
-        confirmButtonText: `Yes`,
-        denyButtonText: `No`,
+        showCancelButton: true,
+        focusCancel: true,
+        customClass: { confirmButton: 'mirotalk-swal-destructive' },
+        confirmButtonText: 'Clear chat',
+        cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -11621,9 +11642,11 @@ function cleanCaptions() {
         position: 'top',
         title: 'Clean up all caption transcripts?',
         imageUrl: images.delete,
-        showDenyButton: true,
-        confirmButtonText: `Yes`,
-        denyButtonText: `No`,
+        showCancelButton: true,
+        focusCancel: true,
+        customClass: { confirmButton: 'mirotalk-swal-destructive' },
+        confirmButtonText: 'Clear captions',
+        cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -12597,11 +12620,13 @@ function deleteMessage(id) {
         background: swBg,
         position: 'top',
         title: 'Chat',
-        text: 'Delete this messages?',
+        text: 'Delete this message?',
         imageUrl: images.delete,
-        showDenyButton: true,
-        confirmButtonText: `Yes`,
-        denyButtonText: `No`,
+        showCancelButton: true,
+        focusCancel: true,
+        customClass: { confirmButton: 'mirotalk-swal-destructive' },
+        confirmButtonText: 'Delete',
+        cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -14790,9 +14815,9 @@ function disableAllPeers(element) {
             element == 'audio'
                 ? "Once muted, you won't be able to unmute them, but they can unmute themselves at any time."
                 : "Once hided, you won't be able to unhide them, but they can unhide themselves at any time.",
-        showDenyButton: true,
+        showCancelButton: true,
         confirmButtonText: element == 'audio' ? `Mute` : `Hide`,
-        denyButtonText: `Cancel`,
+        cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -14826,9 +14851,11 @@ function ejectEveryone() {
         position: 'center',
         title: 'Eject everyone except yourself?',
         text: 'Are you sure to want eject all participants from the room?',
-        showDenyButton: true,
-        confirmButtonText: `Yes`,
-        denyButtonText: `No`,
+        showCancelButton: true,
+        focusCancel: true,
+        customClass: { confirmButton: 'mirotalk-swal-destructive' },
+        confirmButtonText: 'Eject everyone',
+        cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -14885,9 +14912,9 @@ function disablePeer(peer_id, element) {
         imageUrl: imageUrl,
         title: title,
         text: text,
-        showDenyButton: true,
+        showCancelButton: true,
         confirmButtonText: confirmButtonText,
-        denyButtonText: `Cancel`,
+        cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -14935,13 +14962,13 @@ function handleRoomAction(config, emit = false) {
                 Swal.fire({
                     allowOutsideClick: false,
                     allowEscapeKey: false,
-                    showDenyButton: true,
+                    showCancelButton: true,
                     background: swBg,
                     imageUrl: images.locked,
                     input: 'text',
                     inputPlaceholder: 'Set Room password',
-                    confirmButtonText: `OK`,
-                    denyButtonText: `Cancel`,
+                    confirmButtonText: 'Lock room',
+                    cancelButtonText: 'Cancel',
                     showClass: { popup: 'animate__animated animate__fadeInDown' },
                     hideClass: { popup: 'animate__animated animate__fadeOutUp' },
                     inputValidator: (pwd) => {
@@ -15050,9 +15077,9 @@ function confirmJoinLock(lock) {
         text: lock
             ? 'Are you sure you want to lock the room? No new participants will be able to join from now on.'
             : 'Are you sure you want to unlock the room? New participants will be able to join again.',
-        showDenyButton: true,
+        showCancelButton: true,
         confirmButtonText: lock ? 'Lock room' : 'Unlock room',
-        denyButtonText: `Cancel`,
+        cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -16023,9 +16050,9 @@ async function openFilePickerModal(config) {
                 applySelection(file);
             });
         },
-        showDenyButton: true,
+        showCancelButton: true,
         confirmButtonText: confirmButtonText,
-        denyButtonText: 'Cancel',
+        cancelButtonText: 'Cancel',
         preConfirm: () => {
             if (!selectedFile) {
                 Swal.showValidationMessage('Choose a file to continue.');
@@ -16800,9 +16827,11 @@ function confirmCleanBoard() {
         position: 'top',
         title: 'Clean the board',
         text: 'Are you sure you want to clean the board?',
-        showDenyButton: true,
-        confirmButtonText: `Yes`,
-        denyButtonText: `No`,
+        showCancelButton: true,
+        focusCancel: true,
+        customClass: { confirmButton: 'mirotalk-swal-destructive' },
+        confirmButtonText: 'Clear board',
+        cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -17450,9 +17479,9 @@ function endDownload() {
                 text: incomingFileInfo.file.fileName + ' size ' + bytesToSize(incomingFileInfo.file.fileSize),
                 imageUrl: e.target.result,
                 imageAlt: 'mirotalk-file-img-download',
-                showDenyButton: true,
+                showCancelButton: true,
                 confirmButtonText: `Save`,
-                denyButtonText: `Cancel`,
+                cancelButtonText: 'Cancel',
                 showClass: { popup: 'animate__animated animate__fadeInDown' },
                 hideClass: { popup: 'animate__animated animate__fadeOutUp' },
             }).then((result) => {
@@ -17471,9 +17500,9 @@ function endDownload() {
             position: 'center',
             title: 'Received file',
             text: incomingFileInfo.file.fileName + ' size ' + bytesToSize(incomingFileInfo.file.fileSize),
-            showDenyButton: true,
+            showCancelButton: true,
             confirmButtonText: `Save`,
-            denyButtonText: `Cancel`,
+            cancelButtonText: 'Cancel',
             showClass: { popup: 'animate__animated animate__fadeInDown' },
             hideClass: { popup: 'animate__animated animate__fadeOutUp' },
         }).then((result) => {
@@ -17791,8 +17820,8 @@ function kickOut(peer_id) {
         background: swBg,
         position: 'top',
         imageUrl: images.leave,
-        title: 'Kick out',
-        text: `Are you sure you want to kick out ${pName}?`,
+        title: 'Eject participant',
+        text: `Are you sure you want to eject ${pName}?`,
         input: 'text',
         inputPlaceholder: 'Reason (optional)',
         inputAttributes: {
@@ -17800,9 +17829,13 @@ function kickOut(peer_id) {
             autocapitalize: 'off',
             autocorrect: 'off',
         },
-        showDenyButton: true,
-        confirmButtonText: `Yes`,
-        denyButtonText: `No`,
+        showCancelButton: true,
+        focusCancel: true,
+        customClass: { confirmButton: 'mirotalk-swal-destructive' },
+        confirmButtonText: 'Eject participant',
+        cancelButtonText: 'Cancel',
+        // SweetAlert 11.4.8 focuses inputs after its initial button focus.
+        didOpen: () => Swal.getCancelButton().focus(),
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {
@@ -17942,7 +17975,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.0.70',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.0.81',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
@@ -17987,17 +18020,15 @@ function leaveFeedback() {
         allowEscapeKey: false,
         showDenyButton: true,
         showCancelButton: true,
-        confirmButtonColor: 'green',
-        denyButtonColor: 'red',
-        cancelButtonColor: 'gray',
+        reverseButtons: true,
         background: swBg,
         imageUrl: images.feedback,
         position: 'top',
         title: 'Leave a feedback',
         text: 'Do you want to rate your MiroTalk experience?',
-        confirmButtonText: `Yes`,
-        denyButtonText: `No`,
-        cancelButtonText: `Cancel`,
+        confirmButtonText: 'Rate experience',
+        denyButtonText: 'Leave without rating',
+        cancelButtonText: 'Stay in meeting',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then((result) => {

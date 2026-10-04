@@ -1359,6 +1359,7 @@ body {
 .caption-inputarea {
     display: flex;
     align-items: center;
+    gap: 8px;
     padding: 12px;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(0, 0, 0, 0.2);
@@ -1370,8 +1371,9 @@ body {
 }
 
 .caption-inputarea select {
-    min-width: 50px;
-    margin: 0 8px;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
     padding: 8px 12px;
     background: rgba(255, 255, 255, 0.1) !important;
     border-radius: 8px;
@@ -1411,20 +1413,40 @@ body {
 /* Speech Recognition Buttons */
 #speechRecognitionStart,
 #speechRecognitionStop {
-    margin: 0 6px;
-    padding: 8px 16px;
+    flex: 0 0 44px;
+    width: 44px;
+    height: 40px;
+    margin: 0 0 0 auto;
+    padding: 0;
     border: none;
     border-radius: 8px;
-    color: #fff;
-    background: rgba(255, 255, 255, 0.1);
+    --caption-button-hover: rgba(0, 0, 0, 0.1);
     transition: all 0.25s ease;
     font-weight: 500;
 }
 
-#speechRecognitionStart:hover,
-#speechRecognitionStop:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: scale(1.05);
+#speechRecognitionStart {
+    color: var(--swal-confirm-ink, #fff);
+    background: var(--swal-confirm-bg, #315bd6);
+    --caption-button-hover: var(--swal-confirm-hover, rgba(0, 0, 0, 0.1));
+}
+
+#speechRecognitionStop {
+    color: #fff;
+    background: #c62828;
+}
+
+#speechRecognitionStart:not([disabled]):hover,
+#speechRecognitionStart:not([disabled]):active,
+#speechRecognitionStop:not([disabled]):hover,
+#speechRecognitionStop:not([disabled]):active {
+    background-image: linear-gradient(var(--caption-button-hover), var(--caption-button-hover));
+}
+
+#speechRecognitionStart:focus-visible,
+#speechRecognitionStop:focus-visible {
+    outline: 2px solid var(--swal-confirm-bg, #315bd6);
+    outline-offset: 3px;
 }
 
 /*--------------------------------------------------------------
@@ -4890,6 +4912,77 @@ input:checked + .slider:before {
     box-shadow: none !important;
 }
 
+.swal2-popup .swal2-styled.swal2-confirm {
+    color: var(--swal-confirm-ink, #fff) !important;
+    --swal-button-hover: var(--swal-confirm-hover, rgba(0, 0, 0, 0.1));
+}
+
+.swal2-popup .swal2-styled.swal2-cancel,
+.swal2-popup .swal2-styled.swal2-deny {
+    color: var(--swal-neutral-ink, #fff) !important;
+    --swal-button-hover: var(--swal-neutral-hover, rgba(0, 0, 0, 0.1));
+}
+
+.swal2-popup .swal2-styled.mirotalk-swal-destructive {
+    background-color: #c62828 !important;
+    color: #fff !important;
+    --swal-button-hover: rgba(0, 0, 0, 0.1);
+}
+
+.swal2-popup .swal2-actions .swal2-styled:not([disabled]):hover,
+.swal2-popup .swal2-actions .swal2-styled:not([disabled]):active {
+    background-image: linear-gradient(var(--swal-button-hover), var(--swal-button-hover)) !important;
+}
+
+.swal2-popup .swal2-actions .swal2-styled.init-join-button {
+    color: #fff !important;
+    background: var(--swal-join-bg, #294da8) !important;
+    border: var(--border) !important;
+    padding: 0.75em 1.5em;
+    font-size: 1.125rem;
+}
+
+.swal2-popup .swal2-actions .swal2-styled.init-join-button:not([disabled]):hover,
+.swal2-popup .swal2-actions .swal2-styled.init-join-button:not([disabled]):active {
+    background: var(--swal-join-hover-bg, #345dbc) !important;
+}
+
+.swal2-popup:not(.swal2-toast) .swal2-actions {
+    width: calc(100% - 3rem);
+    margin: 1.25rem 1.5rem 0;
+    padding: 4px;
+    gap: 0.625rem;
+    justify-content: center;
+    align-items: stretch;
+    flex-wrap: nowrap;
+}
+
+.swal2-popup:not(.swal2-toast) .swal2-styled {
+    min-width: var(--ds-touch-min, 44px);
+    min-height: var(--ds-touch-min, 44px);
+    max-width: 100%;
+    flex: 0 1 auto;
+    margin: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.swal2-popup .swal2-actions .swal2-styled:focus-visible {
+    outline: 2px solid #fff !important;
+    outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+    .swal2-popup:not(.swal2-toast) .swal2-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .swal2-popup:not(.swal2-toast) .swal2-styled {
+        width: 100%;
+    }
+}
+
 .swal2-validation-message,
 .swal2-title,
 .swal2-content,
@@ -5796,7 +5889,7 @@ input:checked + .slider:before {
     background: var(--select-bg);
     color: #ffffff;
     font-size: small;
-    max-width: 135px;
+    max-width: none;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 8px;
     padding: 6px 10px;

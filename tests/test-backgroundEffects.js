@@ -185,16 +185,23 @@ describe('client camera background integration', () => {
         context = vm.createContext({
             MediaStream,
             BackgroundEffects,
+            DataTransfer: class {
+                constructor() {
+                    this.files = [];
+                    this.items = { add: (file) => this.files.push(file) };
+                }
+            },
             Event,
             cameraEffects: null,
             backgroundImage: {},
+            backgroundImageFile: null,
             backgroundEffectsBusy: false,
             backgroundEffectSelect: { value: 'off', dispatchEvent: sinon.spy() },
-            backgroundImageInput: {},
+            backgroundImageInput: { files: [], click: sinon.spy() },
             backgroundEffectLoading: {},
             backgroundEffectsSection: { setAttribute() {} },
             initBackgroundEffectSelect: { value: 'off' },
-            initBackgroundImageInput: {},
+            initBackgroundImageInput: { files: [], click: sinon.spy() },
             initBackgroundEffectLoading: {},
             initBackgroundEffectsSection: { setAttribute() {} },
             initBackgroundError: { textContent: '', hidden: true, firstChild: {} },
@@ -303,6 +310,23 @@ describe('client camera background integration', () => {
         assert.equal(context.initBackgroundEffectLoading.hidden, true);
     });
 
+    for (const select of ['initBackgroundEffectSelect', 'backgroundEffectSelect']) {
+        it(`shows the manual image picker from ${select} without opening a dialog`, async () => {
+            context.backgroundImage = null;
+            context[select].value = 'image';
+            await context.changeCameraBackground({ target: context[select] });
+
+            assert.equal(context.backgroundImageInput.click.callCount, 0);
+            assert.equal(context.initBackgroundImageInput.click.callCount, 0);
+            assert.equal(context.backgroundImageInput.hidden, false);
+            assert.equal(context.initBackgroundImageInput.hidden, false);
+            assert.equal(context.backgroundEffectSelect.value, 'image');
+            assert.equal(context.initBackgroundEffectSelect.value, 'image');
+            assert.equal(context.localVideoMediaStream.getVideoTracks()[0], camera);
+            assert.equal(processors.length, 0);
+        });
+    }
+
     it('validates images selected from the pre-join picker', async () => {
         context.initBackgroundImageInput.files = [{ type: 'text/plain', size: 1 }];
         context.initBackgroundImageInput.value = 'invalid.txt';
@@ -310,6 +334,70 @@ describe('client camera background integration', () => {
         assert.equal(context.initBackgroundImageInput.value, '');
         assert.equal(context.userLog.callCount, 1);
         assert.equal(processors.length, 0);
+    });
+
+    for (const picker of ['initBackgroundImageInput', 'backgroundImageInput']) {
+        it(`shares the accepted image filename from ${picker} with both pickers`, async () => {
+            const files = [{ name: 'landscape.png', type: 'image/png', size: 100 }];
+            context[picker].files = files;
+            context.backgroundEffectSelect.value = 'image';
+            context.URL = { createObjectURL: () => 'blob:landscape', revokeObjectURL: sinon.spy() };
+            context.Image = class {
+                set src(value) {
+                    this.onload();
+                }
+            };
+
+            await context.loadCameraBackgroundImage({ target: context[picker] });
+
+            assert.equal(context.backgroundImageFile, files[0]);
+            assert.equal(context.backgroundImageInput.files[0], files[0]);
+            assert.equal(context.initBackgroundImageInput.files[0], files[0]);
+            assert.notEqual(context.backgroundImageInput.files, context.initBackgroundImageInput.files);
+            assert.equal(context.backgroundImageInput.files[0].name, 'landscape.png');
+            assert.equal(context.backgroundEffectSelect.value, 'image');
+            assert.equal(context.initBackgroundEffectSelect.value, 'image');
+            assert.equal(context.localVideoMediaStream.getVideoTracks()[0], output);
+            context.setupBackgroundControls();
+            assert.equal(context.backgroundImageInput.files[0], files[0]);
+            assert.equal(context.initBackgroundImageInput.files[0], files[0]);
+        });
+    }
+
+    it('preserves the accepted filename when a replacement is invalid', async () => {
+        const files = [{ name: 'landscape.png', type: 'image/png', size: 100 }];
+        context.backgroundImageFile = files[0];
+        context.backgroundEffectSelect.value = 'image';
+        context.initBackgroundImageInput.files = [{ name: 'invalid.txt', type: 'text/plain', size: 1 }];
+
+        await context.loadCameraBackgroundImage({ target: context.initBackgroundImageInput });
+
+        assert.equal(context.backgroundImageInput.files[0], files[0]);
+        assert.equal(context.initBackgroundImageInput.files[0], files[0]);
+        assert.equal(context.userLog.callCount, 1);
+    });
+
+    it('preserves the accepted image and filename when a replacement cannot decode', async () => {
+        const image = context.backgroundImage;
+        const files = [{ name: 'landscape.png', type: 'image/png', size: 100 }];
+        context.backgroundImageFile = files[0];
+        context.backgroundEffectSelect.value = 'image';
+        context.backgroundImageInput.files = [{ name: 'broken.png', type: 'image/png', size: 100 }];
+        context.URL = { createObjectURL: () => 'blob:broken', revokeObjectURL: sinon.spy() };
+        context.Image = class {
+            set src(value) {
+                this.onerror();
+            }
+        };
+
+        await context.loadCameraBackgroundImage({ target: context.backgroundImageInput });
+
+        assert.equal(context.backgroundImage, image);
+        assert.equal(context.backgroundImageInput.files[0], files[0]);
+        assert.equal(context.initBackgroundImageInput.files[0], files[0]);
+        assert.equal(context.backgroundEffectsBusy, false);
+        assert.equal(context.userLog.callCount, 1);
+        assert.equal(context.URL.revokeObjectURL.callCount, 1);
     });
 
     it('shows invalid image warnings inline without replacing the pre-join popup', async () => {
