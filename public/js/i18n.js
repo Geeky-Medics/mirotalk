@@ -77,7 +77,7 @@
     function lookup(key, namespace) {
         const table = state.dict && state.dict[namespace];
         if (table) {
-            const value = table[key];
+            const value = table[key] || table[key.replace(/\s+/g, ' ')];
             if (typeof value === 'string' && value.length > 0 && value !== key) return value;
         }
         return null;
@@ -189,9 +189,7 @@
         return true;
     }
 
-    // Toasts/snackbars are plain top-level functions in client.js (userLog / toastMessage / msgPopup).
-    // They build Swal.mixin({toast:true}).fire() instances that bypass the wrapped Swal.fire,
-    // so wrap the functions themselves and translate their message under the 'toasts' namespace.
+    // Translate feedback under the 'toasts' namespace before the shared SweetAlert renderer.
     function wrapToasts() {
         if (typeof window.userLog === 'function' && !window.userLog.__i18nWrapped) {
             const original = window.userLog;
