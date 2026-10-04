@@ -277,7 +277,14 @@
         "Video": "ویدئو",
         "Whiteboard": "تخته وایت برد",
         "Zoom In": "بزرگ‌نمایی",
-        "Zoom Out": "کوچک‌نمایی"
+        "Zoom Out": "کوچک‌نمایی",
+        "Draw on Screen": "ترسیم روی صفحه",
+        "Focus Mode": "حالت تمرکز",
+        "Picture in Picture": "تصویر در تصویر",
+        "Pin Screen": "سنجاق کردن صفحه",
+        "Pin Video": "سنجاق کردن ویدیو",
+        "Take Snapshot": "گرفتن عکس فوری",
+        "Video Privacy": "حریم خصوصی ویدیو"
     },
     "labels": {
         "= Arrow": "= فلش",
@@ -310,15 +317,15 @@
         "🎥 Standard (640×480)": "🎥 استاندارد (640×480)",
         "🔴 REC": "🔴 ضبط",
         "0s": "0s",
-        "15 - frame-per-second": "15 - frame-per-second",
+        "15 - frame-per-second": "15 fps",
         "15 fps": "15 fps",
         "2k": "2k",
-        "30 - frame-per-second": "30 - frame-per-second",
+        "30 - frame-per-second": "30 fps",
         "30 fps": "30 fps",
         "4K": "4K",
-        "5 - frame-per-second": "5 - frame-per-second",
+        "5 - frame-per-second": "5 fps",
         "5 fps": "5 fps",
-        "60 - frame-per-second": "60 - frame-per-second",
+        "60 - frame-per-second": "60 fps",
         "60 fps": "60 fps",
         "6K": "6K",
         "8K": "8K",
@@ -634,7 +641,7 @@
         "Create": "ایجاد کنید",
         "Create Sticky Note": "یادداشت چسبنده ایجاد کنید",
         "Delete this messages?": "این پیام حذف شود؟",
-        "Do you want to rate your MiroTalk experience?": "آیا می خواهید به تجربه MiroTalk خود امتیاز دهید؟",
+        "You can optionally rate your MiroTalk experience before you go.": "در صورت تمایل، می‌توانید پیش از خروج به تجربه خود از MiroTalk امتیاز دهید.",
         "Do you want to share your screen?": "آیا می خواهید صفحه نمایش خود را به اشتراک بگذارید؟",
         "Edit frame title": "عنوان فریم را ویرایش کنید",
         "Eject everyone except yourself?": "همه به‌جز خودتان اخراج شوند؟",
@@ -650,7 +657,7 @@
         "Join meeting": "به جلسه بپیوندید",
         "Kick out": "بیرون انداختن",
         "Kicked out!": "اخراج شدید!",
-        "Leave a feedback": "بازخورد بگذارید",
+        "Leave the meeting?": "از جلسه خارج می‌شوید؟",
         "Lock room": "اتاق قفل",
         "Lock room?": "اتاق قفل؟",
         "Login": "وارد شوید",
@@ -697,7 +704,7 @@
         "Unlock room": "قفل اتاق را باز کنید",
         "Unlock room?": "باز کردن قفل اتاق؟",
         "Username": "نام کاربری:",
-        "WebRTC P2P v2.0.81": "WebRTC P2P v2.0.81",
+        "WebRTC P2P v2.0.85": "WebRTC P2P v2.0.85",
         "Whiteboard Shortcuts": "میانبرهای تخته سفید",
         "Yes": "بله",
         "Your microphone is off": "میکروفون شما خاموش است",
@@ -709,8 +716,14 @@
         "Eject everyone": "اخراج همه",
         "Eject participant": "اخراج شرکت‌کننده",
         "Leave without rating": "خروج بدون امتیازدهی",
-        "Rate experience": "امتیازدهی به تجربه",
-        "Stay in meeting": "ماندن در جلسه"
+        "Leave & rate": "خروج و امتیازدهی",
+        "Download recording": "دانلود ضبط",
+        "Continue leaving": "ادامه خروج",
+        "Download your recording, finish saving it, then continue leaving.": "ضبط خود را دانلود کنید، ذخیره آن را کامل کنید، سپس به خروج ادامه دهید.",
+        "Recording download failed. Please try again.": "دانلود ضبط ناموفق بود. لطفاً دوباره تلاش کنید.",
+        "Please wait while your recording is prepared for download.": "لطفاً صبر کنید تا ضبط شما برای دانلود آماده شود.",
+        "Stay in meeting": "ماندن در جلسه",
+        "Recording": "ضبط"
     },
     "toasts": {
         "⚠️ File transfer aborted": "⚠️ انتقال فایل لغو شد",
@@ -824,6 +837,7 @@
         "Zoom in not allowed if video on privacy mode": "در حالت حریم خصوصی ویدیو، بزرگ‌نمایی مجاز نیست",
         "Zoom in work when video is on": "بزرگ‌نمایی وقتی ویدیو روشن است کار می‌کند",
         "Zoom out not allowed if video on privacy mode": "در حالت حریم خصوصی ویدیو، کوچک‌نمایی مجاز نیست",
-        "Zoom out work when video is on": "کوچک‌نمایی وقتی ویدیو روشن است کار می‌کند"
+        "Zoom out work when video is on": "کوچک‌نمایی وقتی ویدیو روشن است کار می‌کند",
+        "Please wait while your recording is prepared for download.": "لطفاً صبر کنید تا فایل ضبط‌شده برای بارگیری آماده شود."
     }
 }

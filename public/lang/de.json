@@ -277,7 +277,14 @@
         "Copy invite link": "Einladungslink kopieren",
         "Invite...": "Einladen...",
         "Participant actions": "Teilnehmeraktionen",
-        "Choose image": "Bild auswählen"
+        "Choose image": "Bild auswählen",
+        "Draw on Screen": "Auf dem Bildschirm zeichnen",
+        "Focus Mode": "Fokusmodus",
+        "Picture in Picture": "Bild-in-Bild",
+        "Pin Screen": "Bildschirm anheften",
+        "Pin Video": "Video anheften",
+        "Take Snapshot": "Momentaufnahme erstellen",
+        "Video Privacy": "Video-Privatsphäre"
     },
     "labels": {
         "= Arrow": "= Pfeil",
@@ -600,7 +607,7 @@
         "Whiteboard": "Whiteboard",
         "Edit screen text annotation": "Textanmerkung für Bildschirm bearbeiten",
         "More text options": "Weitere Textoptionen",
-        "Screen annotation tools": "Screen annotation tools",
+        "Screen annotation tools": "Werkzeuge zur Bildschirmanmerkung",
         "Text formatting": "Textformatierung",
         "Annotation downloads": "Anmerkungen herunterladen",
         "Background image": "Hintergrundbild",
@@ -630,7 +637,7 @@
         "Create": "Erstellen",
         "Create Sticky Note": "Notizzettel erstellen",
         "Delete this messages?": "Diese Nachrichten löschen?",
-        "Do you want to rate your MiroTalk experience?": "Möchten Sie Ihre MiroTalk-Erfahrung bewerten?",
+        "You can optionally rate your MiroTalk experience before you go.": "Wenn Sie möchten, können Sie Ihre MiroTalk-Erfahrung vor dem Verlassen bewerten.",
         "Do you want to share your screen?": "Möchten Sie Ihren Bildschirm teilen?",
         "Eject everyone except yourself?": "Alle außer dir selbst rausschmeißen?",
         "Email invite": "E-Mail-Einladung",
@@ -641,7 +648,7 @@
         "Join meeting": "An Besprechung teilnehmen",
         "Kick out": "Rausschmeißen",
         "Kicked out!": "Rausgeschmissen!",
-        "Leave a feedback": "Feedback hinterlassen",
+        "Leave the meeting?": "Meeting verlassen?",
         "Lock room?": "Raum sperren?",
         "Login": "Anmelden",
         "No": "Nein",
@@ -671,7 +678,7 @@
         "Time Limit Reached": "Zeitlimit erreicht",
         "Unlock room?": "Raum entsperren?",
         "Username": "Benutzername",
-        "WebRTC P2P v2.0.81": "WebRTC P2P v2.0.81",
+        "WebRTC P2P v2.0.85": "WebRTC P2P v2.0.85",
         "Whiteboard Shortcuts": "Whiteboard-Tastenkürzel",
         "Yes": "Ja",
         "Schedule email invitation": "E-Mail-Einladung planen",
@@ -709,8 +716,14 @@
         "Eject everyone": "Alle entfernen",
         "Eject participant": "Teilnehmer entfernen",
         "Leave without rating": "Ohne Bewertung verlassen",
-        "Rate experience": "Erfahrung bewerten",
-        "Stay in meeting": "Im Meeting bleiben"
+        "Leave & rate": "Verlassen und bewerten",
+        "Download recording": "Aufnahme herunterladen",
+        "Continue leaving": "Verlassen fortsetzen",
+        "Download your recording, finish saving it, then continue leaving.": "Laden Sie Ihre Aufnahme herunter, schließen Sie das Speichern ab und setzen Sie dann das Verlassen fort.",
+        "Recording download failed. Please try again.": "Die Aufnahme konnte nicht heruntergeladen werden. Bitte versuchen Sie es erneut.",
+        "Please wait while your recording is prepared for download.": "Bitte warten Sie, während Ihre Aufnahme zum Herunterladen vorbereitet wird.",
+        "Stay in meeting": "Im Meeting bleiben",
+        "Recording": "Aufnahme"
     },
     "toasts": {
         "Select a grouped object to ungroup.": "Wählen Sie ein gruppiertes Objekt aus, um die Gruppierung aufzuheben.",
@@ -824,6 +837,7 @@
         "Background effects unavailable. Continuing without effects.": "Hintergrundeffekte sind nicht verfügbar. Es wird ohne Effekte fortgefahren.",
         "Choose a PNG, JPEG or WebP image up to 10 MB.": "Wähle ein PNG-, JPEG- oder WebP-Bild mit maximal 10 MB.",
         "Unable to change camera background.": "Der Kamerahintergrund konnte nicht geändert werden.",
-        "Unable to load background image.": "Das Hintergrundbild konnte nicht geladen werden."
+        "Unable to load background image.": "Das Hintergrundbild konnte nicht geladen werden.",
+        "Please wait while your recording is prepared for download.": "Bitte warten Sie, während Ihre Aufnahme für den Download vorbereitet wird."
     }
 }

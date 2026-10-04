@@ -138,7 +138,7 @@
         "More text options": "المزيد من خيارات النص",
         "Save text annotation": "حفظ التعليق التوضيحي النصي",
         "Strikethrough text": "نص خطي",
-        "Text": "Text",
+        "Text": "نص",
         "Text alignment: center. Click to cycle": "محاذاة النص: في المنتصف. انقر للتبديل",
         "Text alignment: left. Click to cycle": "محاذاة النص: إلى اليسار. انقر للتبديل",
         "Text alignment: right. Click to cycle": "محاذاة النص: يمين. انقر للتبديل",
@@ -277,7 +277,14 @@
         "Copy invite link": "نسخ رابط الدعوة",
         "Invite...": "دعوة...",
         "Participant actions": "إجراءات المشاركين",
-        "Choose image": "اختيار صورة"
+        "Choose image": "اختيار صورة",
+        "Draw on Screen": "الرسم على الشاشة",
+        "Focus Mode": "وضع التركيز",
+        "Picture in Picture": "صورة داخل صورة",
+        "Pin Screen": "تثبيت الشاشة",
+        "Pin Video": "تثبيت الفيديو",
+        "Take Snapshot": "التقاط صورة",
+        "Video Privacy": "خصوصية الفيديو"
     },
     "labels": {
         "= Arrow": "= سهم",
@@ -600,7 +607,7 @@
         "Whiteboard": "السبورة",
         "Edit screen text annotation": "تعديل نص التعليق التوضيحي للشاشة",
         "More text options": "المزيد من خيارات النص",
-        "Screen annotation tools": "Screen annotation tools",
+        "Screen annotation tools": "أدوات التعليق على الشاشة",
         "Text formatting": "تنسيق النص",
         "Annotation downloads": "تنزيلات التعليقات التوضيحية",
         "Background image": "صورة الخلفية",
@@ -630,7 +637,7 @@
         "Create": "إنشاء",
         "Create Sticky Note": "إنشاء ملاحظة لاصقة",
         "Delete this messages?": "هل تريد حذف هذه الرسائل؟",
-        "Do you want to rate your MiroTalk experience?": "هل تريد تقييم تجربتك مع MiroTalk؟",
+        "You can optionally rate your MiroTalk experience before you go.": "يمكنك تقييم تجربتك مع MiroTalk قبل المغادرة إذا أردت.",
         "Do you want to share your screen?": "هل تريد مشاركة شاشتك؟",
         "Eject everyone except yourself?": "طرد الجميع باستثناء نفسك؟",
         "Email invite": "دعوة بالبريد الإلكتروني",
@@ -641,7 +648,7 @@
         "Join meeting": "الانضمام إلى الاجتماع",
         "Kick out": "طرد",
         "Kicked out!": "طرد!",
-        "Leave a feedback": "اترك ملاحظاتك",
+        "Leave the meeting?": "هل تريد مغادرة الاجتماع؟",
         "Lock room?": "قفل الغرفة؟",
         "Login": "تسجيل الدخول",
         "No": "لا",
@@ -671,7 +678,7 @@
         "Time Limit Reached": "تم بلوغ الحد الزمني",
         "Unlock room?": "إلغاء قفل الغرفة؟",
         "Username": "اسم المستخدم",
-        "WebRTC P2P v2.0.81": "WebRTC P2P v2.0.81",
+        "WebRTC P2P v2.0.85": "WebRTC P2P v2.0.85",
         "Whiteboard Shortcuts": "اختصارات السبورة",
         "Yes": "نعم",
         "Schedule email invitation": "جدولة دعوة عبر البريد الإلكتروني",
@@ -709,8 +716,14 @@
         "Eject everyone": "إخراج الجميع",
         "Eject participant": "إخراج المشارك",
         "Leave without rating": "المغادرة دون تقييم",
-        "Rate experience": "تقييم التجربة",
-        "Stay in meeting": "البقاء في الاجتماع"
+        "Leave & rate": "المغادرة والتقييم",
+        "Download recording": "تنزيل التسجيل",
+        "Continue leaving": "متابعة المغادرة",
+        "Download your recording, finish saving it, then continue leaving.": "نزّل تسجيلك وأكمل حفظه، ثم تابع المغادرة.",
+        "Recording download failed. Please try again.": "تعذّر تنزيل التسجيل. يرجى المحاولة مرة أخرى.",
+        "Please wait while your recording is prepared for download.": "يرجى الانتظار ريثما يتم تجهيز تسجيلك للتنزيل.",
+        "Stay in meeting": "البقاء في الاجتماع",
+        "Recording": "التسجيل"
     },
     "toasts": {
         "Select a grouped object to ungroup.": "حدد كائنًا مجمعًا لفك تجميعه.",
@@ -824,6 +837,7 @@
         "Background effects unavailable. Continuing without effects.": "تأثيرات الخلفية غير متاحة. ستتم المتابعة بدون تأثيرات.",
         "Choose a PNG, JPEG or WebP image up to 10 MB.": "اختر صورة PNG أو JPEG أو WebP بحجم لا يتجاوز 10 ميجابايت.",
         "Unable to change camera background.": "تعذر تغيير خلفية الكاميرا.",
-        "Unable to load background image.": "تعذر تحميل صورة الخلفية."
+        "Unable to load background image.": "تعذر تحميل صورة الخلفية.",
+        "Please wait while your recording is prepared for download.": "يرجى الانتظار حتى يتم تجهيز التسجيل للتنزيل."
     }
 }

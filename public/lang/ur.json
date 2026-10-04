@@ -277,7 +277,14 @@
         "Video": "ویڈیو",
         "Whiteboard": "وائٹ بورڈ",
         "Zoom In": "بڑا کریں",
-        "Zoom Out": "چھوٹا کریں"
+        "Zoom Out": "چھوٹا کریں",
+        "Draw on Screen": "اسکرین پر ڈرائنگ کریں",
+        "Focus Mode": "فوکس موڈ",
+        "Picture in Picture": "تصویر میں تصویر",
+        "Pin Screen": "اسکرین پن کریں",
+        "Pin Video": "ویڈیو پن کریں",
+        "Take Snapshot": "اسنیپ شاٹ لیں",
+        "Video Privacy": "ویڈیو کی رازداری"
     },
     "labels": {
         "= Arrow": "= تیر",
@@ -310,15 +317,15 @@
         "🎥 Standard (640×480)": "🎥 معیاری (640×480)",
         "🔴 REC": "🔴 ریکارڈنگ",
         "0s": "0s",
-        "15 - frame-per-second": "15 - frame-per-second",
+        "15 - frame-per-second": "15 fps",
         "15 fps": "15 fps",
         "2k": "2k",
-        "30 - frame-per-second": "30 - frame-per-second",
+        "30 - frame-per-second": "30 fps",
         "30 fps": "30 fps",
         "4K": "4K",
-        "5 - frame-per-second": "5 - frame-per-second",
+        "5 - frame-per-second": "5 fps",
         "5 fps": "5 fps",
-        "60 - frame-per-second": "60 - frame-per-second",
+        "60 - frame-per-second": "60 fps",
         "60 fps": "60 fps",
         "6K": "6K",
         "8K": "8K",
@@ -634,7 +641,7 @@
         "Create": "بنائیں",
         "Create Sticky Note": "سٹکی نوٹ بنائیں",
         "Delete this messages?": "اس پیغام کو حذف کریں؟",
-        "Do you want to rate your MiroTalk experience?": "کیا آپ اپنے MiroTalk تجربے کی درجہ بندی کرنا چاہتے ہیں؟",
+        "You can optionally rate your MiroTalk experience before you go.": "اگر آپ چاہیں تو جانے سے پہلے اپنے MiroTalk تجربے کی درجہ بندی کر سکتے ہیں۔",
         "Do you want to share your screen?": "کیا آپ اپنی اسکرین کا اشتراک کرنا چاہتے ہیں؟",
         "Edit frame title": "فریم کے عنوان میں ترمیم کریں۔",
         "Eject everyone except yourself?": "اپنے علاوہ سب کو نکالیں؟",
@@ -650,7 +657,7 @@
         "Join meeting": "میٹنگ میں شامل ہوں۔",
         "Kick out": "کک آؤٹ",
         "Kicked out!": "کمرے سے نکال دیا گیا!",
-        "Leave a feedback": "ایک رائے چھوڑیں۔",
+        "Leave the meeting?": "کیا میٹنگ چھوڑنا چاہتے ہیں؟",
         "Lock room": "مقفل کمرہ",
         "Lock room?": "کمرہ مقفل؟",
         "Login": "لاگ ان",
@@ -697,7 +704,7 @@
         "Unlock room": "کمرے کو غیر مقفل کریں۔",
         "Unlock room?": "کمرے کو غیر مقفل کریں؟",
         "Username": "صارف نام:",
-        "WebRTC P2P v2.0.81": "WebRTC P2P v2.0.81",
+        "WebRTC P2P v2.0.85": "WebRTC P2P v2.0.85",
         "Whiteboard Shortcuts": "وائٹ بورڈ شارٹ کٹس",
         "Yes": "جی ہاں",
         "Your microphone is off": "آپ کا مائیکروفون بند ہے۔",
@@ -709,8 +716,14 @@
         "Eject everyone": "سب کو باہر نکالیں",
         "Eject participant": "شریک کو باہر نکالیں",
         "Leave without rating": "درجہ بندی کیے بغیر نکلیں",
-        "Rate experience": "تجربے کی درجہ بندی کریں",
-        "Stay in meeting": "میٹنگ میں رہیں"
+        "Leave & rate": "چھوڑیں اور درجہ بندی کریں",
+        "Download recording": "ریکارڈنگ ڈاؤن لوڈ کریں",
+        "Continue leaving": "چھوڑنا جاری رکھیں",
+        "Download your recording, finish saving it, then continue leaving.": "اپنی ریکارڈنگ ڈاؤن لوڈ کریں، اسے محفوظ کرنا مکمل کریں، پھر چھوڑنا جاری رکھیں۔",
+        "Recording download failed. Please try again.": "ریکارڈنگ ڈاؤن لوڈ نہیں ہو سکی۔ براہ کرم دوبارہ کوشش کریں۔",
+        "Please wait while your recording is prepared for download.": "براہ کرم انتظار کریں، آپ کی ریکارڈنگ ڈاؤن لوڈ کے لیے تیار کی جا رہی ہے۔",
+        "Stay in meeting": "میٹنگ میں رہیں",
+        "Recording": "ریکارڈنگ"
     },
     "toasts": {
         "⚠️ File transfer aborted": "⚠️ فائل کی منتقلی منسوخ ہو گئی",
@@ -824,6 +837,7 @@
         "Zoom in not allowed if video on privacy mode": "ویڈیو پرائیویسی موڈ میں ہو تو بڑا کرنے کی اجازت نہیں",
         "Zoom in work when video is on": "ویڈیو چلنے پر بڑا کیا جا سکتا ہے",
         "Zoom out not allowed if video on privacy mode": "ویڈیو پرائیویسی موڈ میں ہو تو چھوٹا کرنے کی اجازت نہیں",
-        "Zoom out work when video is on": "ویڈیو چلنے پر چھوٹا کیا جا سکتا ہے"
+        "Zoom out work when video is on": "ویڈیو چلنے پر چھوٹا کیا جا سکتا ہے",
+        "Please wait while your recording is prepared for download.": "براہِ کرم انتظار کریں، آپ کی ریکارڈنگ ڈاؤن لوڈ کے لیے تیار کی جا رہی ہے۔"
     }
 }

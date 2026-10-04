@@ -138,7 +138,7 @@
         "More text options": "텍스트 옵션 더 보기",
         "Save text annotation": "텍스트 주석 저장",
         "Strikethrough text": "취소선 텍스트",
-        "Text": "Text",
+        "Text": "텍스트",
         "Text alignment: center. Click to cycle": "텍스트 정렬: 중앙. 클릭하여 순환",
         "Text alignment: left. Click to cycle": "텍스트 정렬: 왼쪽. 클릭하여 순환",
         "Text alignment: right. Click to cycle": "텍스트 정렬: 오른쪽. 클릭하여 순환",
@@ -277,7 +277,14 @@
         "Copy invite link": "초대 링크 복사",
         "Invite...": "초대...",
         "Participant actions": "참가자 작업",
-        "Choose image": "이미지 선택"
+        "Choose image": "이미지 선택",
+        "Draw on Screen": "화면에 그리기",
+        "Focus Mode": "포커스 모드",
+        "Picture in Picture": "화면 속 화면",
+        "Pin Screen": "화면 고정",
+        "Pin Video": "비디오 고정",
+        "Take Snapshot": "스냅샷 찍기",
+        "Video Privacy": "비디오 개인정보 보호"
     },
     "labels": {
         "= Arrow": "= 화살표",
@@ -600,7 +607,7 @@
         "Whiteboard": "화이트보드",
         "Edit screen text annotation": "화면 텍스트 주석 편집",
         "More text options": "텍스트 옵션 더 보기",
-        "Screen annotation tools": "Screen annotation tools",
+        "Screen annotation tools": "화면 주석 도구",
         "Text formatting": "텍스트 서식",
         "Annotation downloads": "주석 다운로드",
         "Background image": "배경 이미지",
@@ -630,7 +637,7 @@
         "Create": "만들기",
         "Create Sticky Note": "스티키 노트 만들기",
         "Delete this messages?": "이 메시지를 삭제하시겠습니까?",
-        "Do you want to rate your MiroTalk experience?": "MiroTalk 경험을 평가하시겠습니까?",
+        "You can optionally rate your MiroTalk experience before you go.": "원하시면 나가기 전에 MiroTalk 이용 경험을 평가할 수 있습니다.",
         "Do you want to share your screen?": "화면을 공유하시겠습니까?",
         "Eject everyone except yourself?": "자신을 제외한 모든 사람을 퇴장시키시겠습니까?",
         "Email invite": "이메일 초대",
@@ -641,7 +648,7 @@
         "Join meeting": "회의 참가",
         "Kick out": "킥아웃",
         "Kicked out!": "쫓겨났습니다!",
-        "Leave a feedback": "피드백 남기기",
+        "Leave the meeting?": "회의에서 나가시겠습니까?",
         "Lock room?": "방을 잠그시겠습니까?",
         "Login": "로그인",
         "No": "아니오",
@@ -671,7 +678,7 @@
         "Time Limit Reached": "시간 제한 도달",
         "Unlock room?": "방 잠금을 해제하시겠습니까?",
         "Username": "사용자 이름",
-        "WebRTC P2P v2.0.81": "WebRTC P2P v2.0.81",
+        "WebRTC P2P v2.0.85": "WebRTC P2P v2.0.85",
         "Whiteboard Shortcuts": "화이트보드 단축키",
         "Yes": "예",
         "Schedule email invitation": "이메일 초대 예약",
@@ -709,8 +716,14 @@
         "Eject everyone": "모두 퇴장시키기",
         "Eject participant": "참가자 퇴장시키기",
         "Leave without rating": "평가 없이 나가기",
-        "Rate experience": "이용 경험 평가",
-        "Stay in meeting": "회의에 남기"
+        "Leave & rate": "나가기 및 평가",
+        "Download recording": "녹화 파일 다운로드",
+        "Continue leaving": "계속 나가기",
+        "Download your recording, finish saving it, then continue leaving.": "녹화 파일을 다운로드하고 저장을 완료한 다음 나가기를 계속하세요.",
+        "Recording download failed. Please try again.": "녹화 파일을 다운로드하지 못했습니다. 다시 시도해 주세요.",
+        "Please wait while your recording is prepared for download.": "녹화 파일을 다운로드할 수 있도록 준비하는 동안 잠시 기다려 주세요.",
+        "Stay in meeting": "회의에 남기",
+        "Recording": "녹화"
     },
     "toasts": {
         "Select a grouped object to ungroup.": "그룹을 해제할 그룹 개체를 선택하세요.",
@@ -824,6 +837,7 @@
         "Background effects unavailable. Continuing without effects.": "배경 효과를 사용할 수 없습니다. 효과 없이 계속합니다.",
         "Choose a PNG, JPEG or WebP image up to 10 MB.": "10 MB 이하의 PNG, JPEG 또는 WebP 이미지를 선택하세요.",
         "Unable to change camera background.": "카메라 배경을 변경할 수 없습니다.",
-        "Unable to load background image.": "배경 이미지를 불러올 수 없습니다."
+        "Unable to load background image.": "배경 이미지를 불러올 수 없습니다.",
+        "Please wait while your recording is prepared for download.": "녹화 파일을 다운로드할 수 있도록 준비 중입니다. 잠시 기다려 주세요."
     }
 }
