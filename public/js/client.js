@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.1.00
+ * @version 2.1.26
  *
  */
 
@@ -207,6 +207,8 @@ const whiteboardBtn = getId('whiteboardBtn');
 const snapshotRoomBtn = getId('snapshotRoomBtn');
 const fileShareBtn = getId('fileShareBtn');
 const documentPiPBtn = getId('documentPiPBtn');
+const openConnectivitySettingsBtn = getId('openConnectivitySettingsBtn');
+const openNetworkSettingsBtn = getId('openNetworkSettingsBtn');
 const aboutBtn = getId('aboutBtn');
 
 // Buttons bottom
@@ -382,6 +384,7 @@ const recordingTypeSelect = getId('recordingTypeSelect');
 const recordingScreenOption = getId('recordingScreenOption');
 const tabProfileBtn = getId('tabProfileBtn');
 const tabShortcutsBtn = getId('tabShortcutsBtn');
+const tabConnectivityBtn = getId('tabConnectivityBtn');
 const tabNetworkBtn = getId('tabNetworkBtn');
 const tabLayoutBtn = getId('tabLayoutBtn');
 const networkIP = getId('networkIP');
@@ -393,6 +396,9 @@ const roomSendEmailBtn = getId('roomSendEmailBtn');
 const tabStylingBtn = getId('tabStylingBtn');
 const tabLanguagesBtn = getId('tabLanguagesBtn');
 const mySettingsCloseBtn = getId('mySettingsCloseBtn');
+const mySettingsNav = getId('mySettingsNav');
+const mySettingsNavToggleBtn = getId('mySettingsNavToggleBtn');
+const mySettingsNavBackdrop = getId('mySettingsNavBackdrop');
 const myPeerNameSet = getId('myPeerNameSet');
 const myPeerNameSetBtn = getId('myPeerNameSetBtn');
 const myProfileAvatarUploadBtn = getId('myProfileAvatarUploadBtn');
@@ -957,7 +963,7 @@ function setButtonsToolTip() {
     setTippy(speechRecognitionStop, 'Stop caption', 'top');
     // Settings
     setTippy(mySettingsCloseBtn, 'Close', 'bottom');
-    setTippy(myPeerNameSetBtn, 'Change name', 'top');
+    if (mySettingsNavToggleBtn) setTippy(mySettingsNavToggleBtn, 'Settings navigation', 'bottom');
     const copyRoomUrlLabel = 'Share room link';
     const translatedCopyRoomUrlLabel =
         window.i18n && typeof window.i18n.t === 'function'
@@ -981,22 +987,6 @@ function setButtonsToolTip() {
     setTippy(switchKeepButtonsVisible, 'Keep buttons always visible', 'right');
     setTippy(switchPinChatByDefault, 'Open chat pinned by default', 'right');
     setTippy(switchKeepAwake, 'Prevent the device from sleeping (if supported)', 'right');
-    setTippy(networkIP, 'IP address associated with the ICE candidate', 'right');
-    setTippy(
-        networkHost,
-        'This type of ICE candidate represents a candidate that corresponds to an interface on the local device. Host candidates are typically generated based on the local IP addresses of the device and can be used for direct peer-to-peer communication within the same network',
-        'right'
-    );
-    setTippy(
-        networkStun,
-        'Server reflexive candidates are obtained by the ICE agent when it sends a request to a STUN (Session Traversal Utilities for NAT) server. These candidates reflect the public IP address and port of the client as observed by the STUN server. They are useful for traversing NATs (Network Address Translators) and establishing connectivity between peers across different networks',
-        'right'
-    );
-    setTippy(
-        networkTurn,
-        'Relay candidates are obtained when communication between peers cannot be established directly due to symmetric NATs or firewall restrictions. In such cases, communication is relayed through a TURN (Traversal Using Relays around NAT) server. TURN servers act as intermediaries, relaying data between peers, allowing them to communicate even when direct connections are not possible. This is typically the fallback mechanism for establishing connectivity when direct peer-to-peer communication fails',
-        'right'
-    );
     // Whiteboard buttons
     setTippy(whiteboardLockBtn, 'Toggle Lock whiteboard', 'right');
     setTippy(whiteboardUnlockBtn, 'Toggle Lock whiteboard', 'right');
@@ -1015,7 +1005,6 @@ function setButtonsToolTip() {
     setTippy(videoUrlCloseBtn, 'Close the video player', 'bottom');
     setTippy(videoAudioCloseBtn, 'Close the video player', 'bottom');
     setTippy(msgerVideoUrlBtn, 'Share a video or audio to all participants', 'top');
-    setTippy(shareMediaAudioVideoBtn, 'Share the video or audio URL', 'top');
 }
 
 /**
@@ -8360,6 +8349,16 @@ function setMySettingsBtn() {
     mySettingsCloseBtn.addEventListener('click', (e) => {
         hideShowMySettings();
     });
+    if (mySettingsNavToggleBtn) {
+        mySettingsNavToggleBtn.addEventListener('click', () => {
+            toggleMobileSettingsNav();
+        });
+    }
+    if (mySettingsNavBackdrop) {
+        mySettingsNavBackdrop.addEventListener('click', () => {
+            closeMobileSettingsNav();
+        });
+    }
     speakerTestBtn.addEventListener('click', (e) => {
         playSpeaker(audioOutputSelect?.value, 'speaker');
     });
@@ -8553,6 +8552,31 @@ function setMySettingsExtraBtns() {
                 hideMenu();
             }
         });
+
+        const openSettingsFromTools = (tabButton, tabName) => {
+            if (!tabButton) return;
+            if (isMobileDevice) {
+                elemDisplay(bottomButtons, false);
+                isButtonsVisible = false;
+            }
+            if (!isMySettingsVisible) {
+                hideShowMySettings();
+            }
+            openTab({ currentTarget: tabButton }, tabName);
+            hideMenu();
+        };
+
+        if (openConnectivitySettingsBtn) {
+            openConnectivitySettingsBtn.addEventListener('click', () => {
+                openSettingsFromTools(tabConnectivityBtn, 'tabConnectivity');
+            });
+        }
+
+        if (openNetworkSettingsBtn) {
+            openNetworkSettingsBtn.addEventListener('click', () => {
+                openSettingsFromTools(tabNetworkBtn, 'tabNetwork');
+            });
+        }
     }
 }
 
@@ -8736,6 +8760,9 @@ function setupMySettings() {
     });
     tabShortcutsBtn.addEventListener('click', (e) => {
         openTab(e, 'tabShortcuts');
+    });
+    tabConnectivityBtn.addEventListener('click', (e) => {
+        openTab(e, 'tabConnectivity');
     });
     tabNetworkBtn.addEventListener('click', (e) => {
         openTab(e, 'tabNetwork');
@@ -13617,6 +13644,7 @@ function downloadCaptions() {
 function hideShowMySettings() {
     if (!isMySettingsVisible) {
         playSound('newMessage');
+        closeMobileSettingsNav();
         // adapt it for mobile
         if (isMobileDevice) {
             mySettings.style.setProperty('width', '100%');
@@ -13636,6 +13664,7 @@ function hideShowMySettings() {
         return;
     }
     elemDisplay(mySettings, false);
+    closeMobileSettingsNav();
     setTippy(mySettingsBtn, 'Open the settings', bottomButtonsPlacement);
     isMySettingsVisible = false;
     videoMediaContainer.style.opacity = 1;
@@ -13661,6 +13690,31 @@ function openTab(evt, tabName) {
     }
     elemDisplay(tabN, true, 'block');
     evt.currentTarget.className += ' active';
+    closeMobileSettingsNav();
+}
+
+function setMobileSettingsNavState(open) {
+    if (!mySettings) return;
+    const compactSettingsLayout = window.matchMedia('(max-width: 830px)').matches;
+    const shouldOpen = compactSettingsLayout && open;
+    mySettings.classList.toggle('settings-nav-open', shouldOpen);
+    if (mySettingsNavToggleBtn) {
+        mySettingsNavToggleBtn.setAttribute('aria-expanded', String(shouldOpen));
+        mySettingsNavToggleBtn.setAttribute(
+            'aria-label',
+            shouldOpen ? 'Close settings navigation' : 'Open settings navigation'
+        );
+    }
+}
+
+function toggleMobileSettingsNav() {
+    if (!mySettingsNav || !window.matchMedia('(max-width: 830px)').matches) return;
+    const isOpen = mySettings.classList.contains('settings-nav-open');
+    setMobileSettingsNavState(!isOpen);
+}
+
+function closeMobileSettingsNav() {
+    setMobileSettingsNavState(false);
 }
 
 /**
@@ -18074,7 +18128,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.00',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.26',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
@@ -18475,11 +18529,17 @@ function hideDisconnectBanner() {
 function userLog(type, message, timerOrPosition, timer, enabled) {
     const position = typeof timerOrPosition === 'string' ? timerOrPosition : undefined;
     const duration = typeof timerOrPosition === 'number' ? timerOrPosition : timer;
+    const isPreJoinDialogActive = () => {
+        const popup = Swal.getPopup?.();
+        if (!popup) return false;
+        return typeof initUser !== 'undefined' && initUser ? popup.contains(initUser) : false;
+    };
+    const shouldAvoidCenterError = !position && isPreJoinDialogActive();
     switch (type) {
         case 'warning':
         case 'error':
             playSound('alert');
-            if ((type === 'warning' || position) && position !== 'center') {
+            if ((type === 'warning' || position || shouldAvoidCenterError) && position !== 'center') {
                 return showSwalToast({
                     background: swBg,
                     position: position || 'top-end',
