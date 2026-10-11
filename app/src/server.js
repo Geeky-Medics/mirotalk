@@ -45,7 +45,7 @@ dependencies: {
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.1.39
+ * @version 2.1.41
  *
  */
 
@@ -198,6 +198,57 @@ const jwtCfg = {
 };
 
 const JWT_VERIFY_OPTIONS = { algorithms: ['HS256'] };
+
+// Short-lived token bound to a room, issued by GET /createRoomToken only to requesters the HTTP
+// policy allows to create rooms. The Socket.IO `join` event requires it to open a new room when
+// OIDC is enabled, because the socket carries no OIDC session of its own.
+const CREATE_ROOM_TOKEN_EXP = '2m';
+
+/**
+ * Creates a short-lived JWT token for creating a room.
+ * @param {string} roomId
+ * @returns {string} JWT token for creating a room
+ */
+function createCreateRoomToken(roomId) {
+    return jwt.sign({ scope: 'create-room', roomId: String(roomId) }, jwtKeys.createRoom, {
+        expiresIn: CREATE_ROOM_TOKEN_EXP,
+    });
+}
+
+/**
+ * Validates a short-lived JWT token for creating a room.
+ * @param {string} token JWT token to validate
+ * @param {string} roomId Room ID to check against the token
+ * @returns {boolean} True if the token is valid for the given room ID, false otherwise
+ */
+// Short-lived token carrying the display name verified by the OIDC provider, issued by
+// GET /oidcIdentity when OIDC_LOCK_USERNAME is enabled. The Socket.IO `join` event trusts the
+// name inside it instead of the client-supplied one.
+const IDENTITY_TOKEN_EXP = '2m';
+
+function createIdentityToken(name) {
+    return jwt.sign({ scope: 'oidc-identity', name }, jwtKeys.identity, { expiresIn: IDENTITY_TOKEN_EXP });
+}
+
+function getVerifiedIdentityName(token) {
+    if (!OIDC.enabled || !OIDC.lockUsername || !token || typeof token !== 'string') return null;
+    try {
+        const decoded = jwt.verify(token, jwtKeys.identity, JWT_VERIFY_OPTIONS);
+        return decoded?.scope === 'oidc-identity' && decoded.name ? String(decoded.name) : null;
+    } catch {
+        return null;
+    }
+}
+
+function isCreateRoomTokenValid(token, roomId) {
+    if (!token || typeof token !== 'string') return false;
+    try {
+        const decoded = jwt.verify(token, jwtKeys.createRoom, JWT_VERIFY_OPTIONS);
+        return decoded?.scope === 'create-room' && decoded.roomId === String(roomId);
+    } catch {
+        return false;
+    }
+}
 
 // Room presenters
 const roomPresenters = config.presenters;
@@ -710,6 +761,50 @@ app.post('/isWidgetRoomActive', (req, res) => {
         roomId && roomId === config.brand?.widget?.roomId && Object.prototype.hasOwnProperty.call(peers, roomId);
     log.debug('isWidgetRoomActive', { roomId, roomWidgetActive });
     res.status(200).json({ message: roomWidgetActive });
+});
+
+// Issue a short-lived token that authorizes the Socket.IO `join` event to open this room.
+// It applies the same room creation policy as the HTTP join routes (OIDC session).
+app.get('/createRoomToken', (req, res) => {
+    const { room } = checkXSS(req.query);
+
+    if (!room || !Validate.isValidRoomName(room)) {
+        return res.status(400).json({ message: 'Invalid room' });
+    }
+
+    res.set('Cache-Control', 'no-store');
+
+    if (!OIDC.enabled) {
+        return res.json({ required: false, token: null });
+    }
+
+    // Creation policy only: ignore whether the room currently exists
+    const creationPeers = Object.fromEntries(Object.entries(peers).filter(([id]) => id !== room));
+
+    if (!isAllowedRoomAccess('/createRoomToken', req, hostCfg, creationPeers, room)) {
+        log.warn('Room creation token denied', { room });
+        return res.status(403).json({ required: true, token: null });
+    }
+
+    return res.json({ required: true, token: createCreateRoomToken(room) });
+});
+
+// Issue a short-lived token with the display name verified by the OIDC provider, so the client
+// can show it read-only and the Socket.IO `join` event can enforce it (OIDC_LOCK_USERNAME).
+app.get('/oidcIdentity', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+
+    if (!OIDC.enabled || !OIDC.lockUsername || !req.oidc?.isAuthenticated()) {
+        return res.json({ locked: false });
+    }
+
+    const user = req.oidc.user || {};
+    const rawName = [user.name, user.nickname, user.email].find((v) => typeof v === 'string' && v.trim());
+    const name = rawName ? String(checkXSS(rawName.trim())).slice(0, 254) : '';
+
+    if (!name) return res.json({ locked: false });
+
+    return res.json({ locked: true, name, token: createIdentityToken(name) });
 });
 
 // Handle Direct join room with params
@@ -1365,6 +1460,8 @@ io.sockets.on('connect', async (socket) => {
                 break;
             case 'getChatGPT':
                 // https://platform.openai.com/docs/introduction
+                // Security: only a joined peer of the room may use the ChatGPT proxy.
+                if (!isPeerInRoom(room_id, socket.id)) return cb({ message: 'Room not found' });
                 if (!configChatGPT.enabled) return cb({ message: 'ChatGPT seems disabled, try later!' });
                 // https://platform.openai.com/docs/api-reference/completions/create
                 try {
@@ -1474,9 +1571,11 @@ io.sockets.on('connect', async (socket) => {
             channel,
             channel_password,
             peer_uuid,
-            peer_name,
+            peer_name: requested_peer_name,
             peer_avatar,
             peer_token,
+            create_room_token,
+            identity_token,
             peer_video,
             peer_audio,
             peer_video_status,
@@ -1497,6 +1596,14 @@ io.sockets.on('connect', async (socket) => {
             return log.debug('[' + socket.id + '] [Warning] already joined', channel);
         }
 
+        // Security: an OIDC-authenticated peer joins with the name verified by the identity provider
+        const verifiedPeerName = getVerifiedIdentityName(identity_token);
+        const peer_name = verifiedPeerName || requested_peer_name;
+        if (verifiedPeerName) {
+            socket.verifiedPeerName = verifiedPeerName;
+            config.peer_name = verifiedPeerName;
+        }
+
         let is_presenter = true;
         let authenticatedUsername = null;
 
@@ -1511,6 +1618,13 @@ io.sockets.on('connect', async (socket) => {
         // a new room. The last case stops unauthenticated Socket.IO clients from creating
         // protected rooms and becoming presenter, bypassing the HTTP login/waiting-room.
         const authRequired = hostCfg.user_auth || peer_token || (hostCfg.protected && isRoomNew);
+
+        // Security: enforce the OIDC room creation policy that the HTTP routes apply. A valid
+        // peer_token is validated below, otherwise opening a new room needs a create-room token.
+        if (OIDC.enabled && isRoomNew && !peer_token && !isCreateRoomTokenValid(create_room_token, channel)) {
+            log.warn('[' + socket.id + '] Room creation not authorized', { ip: peer_ip, channel });
+            return socket.emit('unauthorized');
+        }
 
         // User Auth required, we check if peer valid
         if (authRequired) {
@@ -1860,6 +1974,10 @@ io.sockets.on('connect', async (socket) => {
         // log.debug('Peer name', config);
         const { room_id, peer_name_old, peer_name_new, peer_avatar } = config;
 
+        if (socket.verifiedPeerName) {
+            return log.debug('[' + socket.id + '] peerName change blocked: name is verified by OIDC');
+        }
+
         let peer_id_to_update = null;
 
         for (let peer_id in peers[room_id]) {
@@ -1909,6 +2027,8 @@ io.sockets.on('connect', async (socket) => {
             });
             return;
         }
+
+        if (socket.verifiedPeerName && data.peer_name) data.peer_name = socket.verifiedPeerName;
 
         await sendToRoom(data.room_id, socket.id, 'message', data);
     });

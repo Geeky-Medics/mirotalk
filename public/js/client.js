@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.1.39
+ * @version 2.1.41
  *
  */
 
@@ -2032,11 +2032,37 @@ function mergeConfig(target, source) {
     return output;
 }
 
+// Name verified by the OIDC provider (OIDC_LOCK_USERNAME); the server enforces it, the UI shows it read-only
+let oidcIdentity = { checked: false, name: null, token: null };
+
+/**
+ * Load the verified OIDC identity (fresh token on every call while the lock is active)
+ */
+async function loadOidcIdentity() {
+    if (oidcIdentity.checked && !oidcIdentity.name) return;
+    try {
+        const response = await fetch('/oidcIdentity', { credentials: 'same-origin' });
+        const data = response.ok ? await response.json() : null;
+        oidcIdentity = data?.locked
+            ? { checked: true, name: filterXSS(data.name), token: data.token }
+            : { checked: true, name: null, token: null };
+    } catch (err) {
+        console.warn('OIDC identity not available', err);
+        oidcIdentity = { checked: true, name: null, token: null };
+    }
+    if (oidcIdentity.name) {
+        myPeerNameSet.value = oidcIdentity.name;
+        myPeerNameSet.disabled = true;
+        elemDisplay(myPeerNameSetBtn, false);
+    }
+}
+
 /**
  * Get user name from OIDC profile
  * @returns {string} Peer Name
  */
 async function getUserName() {
+    if (oidcIdentity.name) return oidcIdentity.name;
     try {
         const { data: profile } = await axios.get('/profile', { timeout: 5000 });
         if (profile && profile.name) {
@@ -2056,6 +2082,9 @@ async function whoAreYou() {
     console.log('11. Who are you?');
 
     document.body.style.background = 'var(--body-bg)';
+
+    await loadOidcIdentity();
+    if (oidcIdentity.name && myPeerName) myPeerName = oidcIdentity.name;
 
     if (myPeerName) {
         elemDisplay(loadingDiv, false);
@@ -2091,6 +2120,7 @@ async function whoAreYou() {
         getId('usernameInput').value = '';
         toggleUsernameEmoji();
     };
+    if (oidcIdentity.name) elemDisplay(initUsernameEmojiButton, false);
     initExitBtn.onclick = (e) => {
         initExitMeeting();
     };
@@ -2144,7 +2174,7 @@ async function whoAreYou() {
         position: 'center',
         input: 'text',
         inputPlaceholder: 'Enter your email or name',
-        inputAttributes: { maxlength: 254, id: 'usernameInput' },
+        inputAttributes: { maxlength: 254, id: 'usernameInput', ...(oidcIdentity.name && { readonly: 'true' }) },
         inputValue: window.localStorage.peer_name ? window.localStorage.peer_name : '',
         html: initUser, // inject html
         confirmButtonText: `Join meeting`,
@@ -2155,6 +2185,7 @@ async function whoAreYou() {
             elemDisplay(loadingDiv, false);
         },
         inputValidator: async (value) => {
+            if (oidcIdentity.name) value = oidcIdentity.name;
             if (!value) return 'Please enter your email or name';
 
             // Long email or name
@@ -3068,10 +3099,31 @@ async function whoAreYouJoin() {
 }
 
 /**
+ * Short-lived token proving the HTTP room creation policy (e.g. OIDC) allows this user to open the room
+ * @param {string} room_id
+ * @returns {Promise<string|null>} token or null
+ */
+async function getCreateRoomToken(room_id) {
+    try {
+        const response = await fetch(`/createRoomToken?room=${encodeURIComponent(room_id)}`, {
+            credentials: 'same-origin',
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        return data?.token || null;
+    } catch (err) {
+        console.warn('Create room token not available', err);
+        return null;
+    }
+}
+
+/**
  * join to channel and send some peer info
  */
 async function joinToChannel() {
     console.log('12. join to channel', roomId);
+    await loadOidcIdentity();
+    const createRoomToken = await getCreateRoomToken(roomId);
     sendToServer('join', {
         join_data_time: getDataTimeString(),
         channel: roomId,
@@ -3081,6 +3133,8 @@ async function joinToChannel() {
         peer_name: myPeerName,
         peer_avatar: myPeerAvatar,
         peer_token: myToken,
+        create_room_token: createRoomToken,
+        identity_token: oidcIdentity.token,
         peer_video: useVideo,
         peer_audio: useAudio,
         peer_video_status: myVideoStatus,
@@ -13726,6 +13780,8 @@ async function updateMyPeerName() {
     // myNewPeerName empty
     if (!myPeerNameSet.value) return;
 
+    if (oidcIdentity.name) return userLog('warning', 'Your name is managed by your login');
+
     // check if peer name is already in use in the room
     if (await checkUserName(myPeerNameSet.value)) {
         myPeerNameSet.value = '';
@@ -18130,7 +18186,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.39',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.41',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
