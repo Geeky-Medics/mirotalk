@@ -45,7 +45,7 @@ dependencies: {
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.1.41
+ * @version 2.1.43
  *
  */
 
@@ -85,20 +85,7 @@ const nodemailer = require('./lib/nodemailer');
 
 const packageJson = require('../../package.json');
 
-// Login attempts limit
-const rateLimit = require('express-rate-limit');
-const maxAttempts = config.host.maxLoginAttempts;
-const minBlockTime = config.host.minLoginBlockTime; // in minutes
-const loginLimiter = rateLimit({
-    windowMs: minBlockTime * 60 * 1000, // 15 minutes default
-    max: maxAttempts,
-    message: {
-        message: `Too many login attempts. Please try again after ${minBlockTime} minute${minBlockTime == 1 ? '' : 's'}.`,
-    },
-    // Throttle by client IP only. A client-supplied username can be varied per
-    // request to get a fresh bucket, defeating the login lockout entirely.
-    keyGenerator: (req) => getIP(req),
-});
+const { loginLimiter, createRoomTokenLimiter } = require('./middleware/rateLimiter');
 
 const port = config.server.port;
 const host = config.server.host;
@@ -765,7 +752,7 @@ app.post('/isWidgetRoomActive', (req, res) => {
 
 // Issue a short-lived token that authorizes the Socket.IO `join` event to open this room.
 // It applies the same room creation policy as the HTTP join routes (OIDC session).
-app.get('/createRoomToken', (req, res) => {
+app.get('/createRoomToken', createRoomTokenLimiter, (req, res) => {
     const { room } = checkXSS(req.query);
 
     if (!room || !Validate.isValidRoomName(room)) {
