@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.1.44
+ * @version 2.1.47
  *
  */
 
@@ -177,6 +177,9 @@ const qrRoomPopupContainer = getId('qrRoomPopupContainer');
 const initUser = getId('initUser');
 const initVideoContainer = getQs('.init-video-container');
 const initVideo = getId('initVideo');
+const initVideoOff = getId('initVideoOff');
+const initVideoOffAvatar = getId('initVideoOffAvatar');
+const initVideoOffText = getId('initVideoOffText');
 const initVideoBtn = getId('initVideoBtn');
 const initAudioBtn = getId('initAudioBtn');
 const initScreenShareBtn = getId('initScreenShareBtn');
@@ -1041,6 +1044,7 @@ function refreshMainButtonsToolTipPlacement() {
  * @param {string} placement position
  */
 function setTippy(element, content, placement) {
+    if (element) syncTooltipAriaLabel(element, content);
     if (isMobileDevice) return;
     if (element) {
         if (element._tippy) {
@@ -1057,6 +1061,25 @@ function setTippy(element, content, placement) {
     } else {
         console.warn('setTippy element not found with content', content);
     }
+}
+
+/**
+ * Give icon-only controls an accessible name that follows their tooltip text
+ * (also on mobile, where tooltips are not rendered).
+ * @param {HTMLElement} element
+ * @param {string} content tooltip text
+ */
+function syncTooltipAriaLabel(element, content) {
+    if (!element || typeof element.matches !== 'function') return;
+    if (typeof content !== 'string' || !content.trim()) return;
+    if (!element.matches('button, a[href], input, select, textarea, [role="button"]')) return;
+    const ownedByTooltip = element.dataset.ariaFromTooltip === 'true';
+    if (!ownedByTooltip && (element.hasAttribute('aria-label') || element.textContent.trim())) return;
+    const label = window.i18n?.t ? window.i18n.t(content, 'tooltips') : content;
+    element.setAttribute('aria-label', label);
+    // Keep the English source so a live language switch re-translates the current state.
+    element['__i18nAttr_aria-label'] = content;
+    element.dataset.ariaFromTooltip = 'true';
 }
 
 /**
@@ -2118,11 +2141,19 @@ async function whoAreYou() {
     };
     initUsernameEmojiButton.onclick = (e) => {
         getId('usernameInput').value = '';
+        updateInitVideoOffAvatar();
         toggleUsernameEmoji();
     };
     if (oidcIdentity.name) elemDisplay(initUsernameEmojiButton, false);
     initExitBtn.onclick = (e) => {
         initExitMeeting();
+    };
+    initVideoOff.onclick = handleInitVideoOffClick;
+    initVideoOff.onkeydown = (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation();
+        handleInitVideoOffClick();
     };
 
     setupBackgroundControls();
@@ -2173,6 +2204,7 @@ async function whoAreYou() {
         title: brand.app?.name || 'MiroTalk P2P',
         position: 'center',
         input: 'text',
+        inputLabel: 'Display name',
         inputPlaceholder: 'Enter your email or name',
         inputAttributes: { maxlength: 254, id: 'usernameInput', ...(oidcIdentity.name && { readonly: 'true' }) },
         inputValue: window.localStorage.peer_name ? window.localStorage.peer_name : '',
@@ -2181,8 +2213,16 @@ async function whoAreYou() {
         customClass: { popup: 'init-modal-size', confirmButton: 'init-join-button' },
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
-        willOpen: () => {
+        willOpen: (popup) => {
             elemDisplay(loadingDiv, false);
+            // SweetAlert2 replaces the input id when inputLabel is set; restore it for existing lookups.
+            const usernameInput = Swal.getInput();
+            if (usernameInput) {
+                usernameInput.id = 'usernameInput';
+                usernameInput.addEventListener('input', updateInitVideoOffAvatar);
+                const label = popup.querySelector('.swal2-input-label');
+                if (label) label.htmlFor = 'usernameInput';
+            }
         },
         inputValidator: async (value) => {
             if (oidcIdentity.name) value = oidcIdentity.name;
@@ -2251,6 +2291,9 @@ async function whoAreYou() {
         initAudioBtn.className = className.audioOff;
         setMyAudioStatus(useAudio);
     }
+
+    // Camera off: keep the preview area with a placeholder (computed once initUser is visible)
+    if (!myVideoStatus) initVideoOffShow();
 
     setTippy(initAudioBtn, 'Stop the audio', 'top');
     setTippy(initVideoBtn, 'Stop the video', 'top');
@@ -2601,6 +2644,7 @@ function detectCameraFacingMode(stream) {
  * @param {string} deviceId
  */
 async function changeInitCamera(deviceId) {
+    initVideoOffShow(false);
     // Show the loader spinner while switching camera
     const initVideoLoader = getId('initVideoLoader');
     if (initVideoLoader) initVideoLoader.style.display = '';
@@ -4737,6 +4781,7 @@ async function loadLocalMedia(stream, kind) {
             myDropdownDiv.className = 'navbar-dropdown';
             myDropdownBtn.id = 'myVideoDropdownBtn';
             myDropdownBtn.className = 'fas fa-ellipsis-vertical';
+            myDropdownBtn.setAttribute('aria-label', 'More options');
             myDropdownContent.className = 'navbar-dropdown-content';
 
             !isMobileDevice &&
@@ -4939,6 +4984,7 @@ async function loadLocalMedia(stream, kind) {
             myScreenDropdownDiv.className = 'navbar-dropdown';
             myScreenDropdownBtn.id = 'myScreenDropdownBtn';
             myScreenDropdownBtn.className = 'fas fa-ellipsis-vertical';
+            myScreenDropdownBtn.setAttribute('aria-label', 'More options');
             myScreenDropdownContent.className = 'navbar-dropdown-content';
 
             !isMobileDevice &&
@@ -5269,6 +5315,7 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
             remoteDropdownDiv.className = 'navbar-dropdown';
             remoteDropdownBtn.id = peer_id + '_videoDropdownBtn';
             remoteDropdownBtn.className = 'fas fa-ellipsis-vertical';
+            remoteDropdownBtn.setAttribute('aria-label', 'More options');
             remoteDropdownContent.className = 'navbar-dropdown-content';
 
             // Build dropdown items
@@ -5573,6 +5620,7 @@ async function loadRemoteMediaStream(stream, peers, peer_id, kind) {
             remoteScreenDropdownDiv.className = 'navbar-dropdown';
             remoteScreenDropdownBtn.id = peer_id + '_screenDropdownBtn';
             remoteScreenDropdownBtn.className = 'fas fa-ellipsis-vertical';
+            remoteScreenDropdownBtn.setAttribute('aria-label', 'More options');
             remoteScreenDropdownContent.className = 'navbar-dropdown-content';
 
             !isMobileDevice &&
@@ -9341,6 +9389,7 @@ function handleUsernameEmojiPicker() {
 
     function addEmojiToUsername(data) {
         getId('usernameInput').value += data.native;
+        updateInitVideoOffAvatar();
         toggleUsernameEmoji();
     }
 
@@ -10015,7 +10064,12 @@ async function handleVideo(e, init, force = null) {
         ]);
         initVideoSelect.disabled = !videoStatus;
         lS.setInitConfig(lS.MEDIA_TYPE.video, videoStatus);
-        initVideoContainerShow(videoStatus);
+        if (videoStatus) {
+            initVideoOffShow(false);
+            initVideoContainerShow();
+        } else {
+            initVideoOffShow();
+        }
     }
 
     if (!videoStatus) {
@@ -10042,8 +10096,79 @@ async function handleVideo(e, init, force = null) {
  * @param {boolean} show
  */
 function initVideoContainerShow(show = true) {
-    initVideoContainer.style.width = show ? '100%' : 'auto';
-    initVideoContainer.style.padding = show ? '10px' : '0px';
+    initVideoContainer.classList.toggle('is-off', !show);
+}
+
+/**
+ * Show/hide the pre-join camera-off placeholder
+ * Keep the preview area when video is enabled in config: "Camera is off" if a camera exists, else "No camera available"
+ * @param {boolean} show
+ */
+function initVideoOffShow(show = true) {
+    const canShow = show && buttons.main.showVideoBtn;
+    elemDisplay(initVideoOff, canShow, 'flex');
+    if (show) initVideoContainerShow(canShow);
+    if (canShow) {
+        const initVideoLoader = getId('initVideoLoader');
+        if (initVideoLoader) initVideoLoader.style.display = 'none';
+        updateInitVideoOff();
+    }
+}
+
+/**
+ * Update the pre-join camera-off placeholder text and click-to-enable state
+ */
+function updateInitVideoOff() {
+    const hasCamera = initVideoSelect.options.length > 0;
+    const canToggle =
+        hasCamera && useVideo && !isScreenStreaming && initVideoBtn.offsetParent !== null && !initVideoBtn.disabled;
+
+    initVideoOffText.textContent = hasCamera
+        ? window.i18n?.t('Camera is off', 'labels') || 'Camera is off'
+        : window.i18n?.t('No camera available', 'labels') || 'No camera available';
+
+    initVideoOff.classList.toggle('clickable', canToggle);
+    if (canToggle) {
+        initVideoOff.setAttribute('role', 'button');
+        initVideoOff.setAttribute('tabindex', '0');
+    } else {
+        initVideoOff.removeAttribute('role');
+        initVideoOff.removeAttribute('tabindex');
+    }
+    updateInitVideoOffAvatar();
+}
+
+/**
+ * Show the username initials (same initials and color as the in-room avatar) or a camera-off icon
+ */
+function updateInitVideoOffAvatar() {
+    const hasCamera = initVideoSelect.options.length > 0;
+    const name = (getId('usernameInput')?.value || '').trim();
+
+    initVideoOffAvatar.replaceChildren();
+    initVideoOffAvatar.style.backgroundColor = '';
+    initVideoOffAvatar.classList.remove('initials');
+
+    if (!hasCamera || !name) {
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-video-slash';
+        initVideoOffAvatar.appendChild(icon);
+        return;
+    }
+
+    const red = Math.pow(name.charCodeAt(0), 7) % 200;
+    const green = Math.pow(name.charCodeAt(1) || name.charCodeAt(0), 7) % 200;
+    const blue = (red + green) % 200;
+    initVideoOffAvatar.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
+    initVideoOffAvatar.classList.add('initials');
+    initVideoOffAvatar.textContent = name.substring(0, 2).toUpperCase();
+}
+
+/**
+ * Turn on the camera by clicking the pre-join camera-off placeholder
+ */
+function handleInitVideoOffClick() {
+    if (initVideoOff.classList.contains('clickable') && !myVideoStatus) initVideoBtn.click();
 }
 
 /**
@@ -10231,6 +10356,7 @@ async function startScreenSharing(constraints, init) {
         } else {
             elemDisplay(initVideo, false);
         }
+        initVideoOffShow(false);
         initVideoContainerShow();
     }
     if (!init) {
@@ -10300,7 +10426,8 @@ async function stopScreenSharing(init) {
     }
     if (init) {
         if (initStream) await stopTracks(initStream);
-        if (useVideo && myVideoStatus) {
+        const restartCamera = useVideo && myVideoStatus;
+        if (restartCamera) {
             try {
                 await changeInitCamera(initVideoSelect.value);
                 initVideo.classList.toggle('mirror');
@@ -10312,10 +10439,10 @@ async function stopScreenSharing(init) {
         } else {
             initStream = null;
             elemDisplay(initVideo, false);
-            initVideoContainerShow(false);
         }
         disable(initVideoSelect, false);
         disable(initVideoBtn, false);
+        if (!restartCamera) initVideoOffShow();
     }
 }
 
@@ -18186,7 +18313,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.44',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.47',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
