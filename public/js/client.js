@@ -16,7 +16,7 @@
  * @license For commercial use or closed source, contact us at license.mirotalk@gmail.com or purchase directly from CodeCanyon
  * @license CodeCanyon: https://codecanyon.net/item/mirotalk-p2p-webrtc-realtime-video-conferences/38376661
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.1.50
+ * @version 2.1.54
  *
  */
 
@@ -523,13 +523,19 @@ const whiteboardShortcutsContent = getId('whiteboardShortcutsContent');
 // Room actions buttons
 const captionEveryoneBtn = getId('captionEveryoneBtn');
 const captionEveryoneStopBtn = getId('captionEveryoneStopBtn');
+const noiseSuppressionOnEveryoneBtn = getId('noiseSuppressionOnEveryoneBtn');
+const noiseSuppressionOffEveryoneBtn = getId('noiseSuppressionOffEveryoneBtn');
+const noiseSuppressionOnEveryoneBtnDesktop = getId('noiseSuppressionOnEveryoneBtnDesktop');
+const noiseSuppressionOffEveryoneBtnDesktop = getId('noiseSuppressionOffEveryoneBtnDesktop');
 const muteEveryoneBtn = getId('muteEveryoneBtn');
 const hideEveryoneBtn = getId('hideEveryoneBtn');
+const stopScreenEveryoneBtn = getId('stopScreenEveryoneBtn');
 const ejectEveryoneBtn = getId('ejectEveryoneBtn');
 const captionEveryoneBtnDesktop = getId('captionEveryoneBtnDesktop');
 const captionEveryoneStopBtnDesktop = getId('captionEveryoneStopBtnDesktop');
 const muteEveryoneBtnDesktop = getId('muteEveryoneBtnDesktop');
 const hideEveryoneBtnDesktop = getId('hideEveryoneBtnDesktop');
+const stopScreenEveryoneBtnDesktop = getId('stopScreenEveryoneBtnDesktop');
 const ejectEveryoneBtnDesktop = getId('ejectEveryoneBtnDesktop');
 const activeRoomsBtn = getId('activeRoomsBtn');
 const lockRoomBtn = getId('lockRoomBtn');
@@ -1371,6 +1377,23 @@ function getChat() {
     return chat;
 }
 
+// Priority: URL param (?noiseSuppression=0|1), then the user's own saved choice, then the server default
+function applyNoiseSuppressionDefault() {
+    let enabled;
+    const queryValue = getQueryParam('noiseSuppression');
+    if (queryValue) {
+        const value = queryValue.toLowerCase();
+        enabled = value === '1' || value === 'true';
+    } else if (!lsSettings.mic_noise_suppression_user_set) {
+        enabled = buttons.settings.customNoiseSuppressionDefault !== false;
+    } else {
+        return;
+    }
+
+    lsSettings.mic_noise_suppression = enabled;
+    console.log('Noise suppression default', { enabled });
+}
+
 /**
  * Get Peer JWT
  * @returns {mixed} boolean false or token string
@@ -1654,6 +1677,7 @@ async function handleConnect() {
     console.log('04. My peer id [ ' + myPeerId + ' ]');
 
     await getButtons();
+    applyNoiseSuppressionDefault();
 
     // If reconnecting, force rejoin to properly sync with other peers
     if (localVideoMediaStream && localAudioMediaStream) {
@@ -1902,6 +1926,7 @@ function handleButtonsRule() {
         { element: captionEveryoneBtn, display: buttons.settings.showCaptionEveryoneBtn },
         { element: muteEveryoneBtn, display: buttons.settings.showMuteEveryoneBtn },
         { element: hideEveryoneBtn, display: buttons.settings.showHideEveryoneBtn },
+        { element: stopScreenEveryoneBtn, display: buttons.settings.showStopScreenEveryoneBtn !== false },
         { element: ejectEveryoneBtn, display: buttons.settings.showEjectEveryoneBtn },
         { element: lockRoomBtn, display: buttons.settings.showLockRoomBtn },
         { element: unlockRoomBtn, display: buttons.settings.showUnlockRoomBtn },
@@ -1915,6 +1940,13 @@ function handleButtonsRule() {
             mode: 'table-row',
         },
     ]);
+
+    [
+        noiseSuppressionOnEveryoneBtn,
+        noiseSuppressionOffEveryoneBtn,
+        noiseSuppressionOnEveryoneBtnDesktop,
+        noiseSuppressionOffEveryoneBtnDesktop,
+    ].forEach((btn) => elemDisplay(btn.closest('li'), !!buttons.settings.customNoiseSuppression, 'list-item'));
 
     updateJoinLockButtons();
 
@@ -2757,6 +2789,9 @@ async function changeLocalCamera(deviceId) {
     const spinner = myVideoWrap ? myVideoWrap.querySelector('.video-loading-spinner') : null;
     if (spinner) elemDisplay(spinner, true, 'flex');
 
+    const previousTrack = cameraEffects?.cameraTrack || getVideoTrack(localVideoMediaStream);
+    const previousDeviceId = previousTrack?.getSettings?.().deviceId;
+
     if (localVideoMediaStream) {
         await stopVideoTracks(localVideoMediaStream);
     }
@@ -2786,6 +2821,19 @@ async function changeLocalCamera(deviceId) {
             } catch (fallbackErr) {
                 console.error('Error accessing init video device with default constraints', fallbackErr);
                 printError(err);
+                // Don't leave the user without a camera: go back to the previous one
+                if (previousDeviceId && previousDeviceId !== deviceId) {
+                    try {
+                        const prevStream = await navigator.mediaDevices.getUserMedia({
+                            video: { ...getVideoConstraints('default'), deviceId: { exact: previousDeviceId } },
+                        });
+                        await updateLocalVideoMediaStream(prevStream);
+                        selectDeviceInSelects([videoSelect, initVideoSelect], previousDeviceId);
+                        return;
+                    } catch (restoreErr) {
+                        console.error('[Error] unable to restore previous camera', restoreErr);
+                    }
+                }
                 if (spinner) elemDisplay(spinner, false);
             }
         });
@@ -2828,6 +2876,8 @@ async function changeLocalMicrophone(deviceId) {
     // Stop the RNNoise pipeline first and stop the *original* microphone tracks.
     const oldMicStream = noiseProcessor?.originalStream || noiseProcessor?.mediaStream || localAudioMediaStream;
 
+    const previousDeviceId = getStreamDeviceId(oldMicStream);
+
     stopNoiseSuppressionPipeline();
 
     if (oldMicStream) {
@@ -2838,31 +2888,46 @@ async function changeLocalMicrophone(deviceId) {
     const audioConstraints = getAudioConstraints(deviceId);
     console.log('audioConstraints', audioConstraints);
 
-    await navigator.mediaDevices
-        .getUserMedia(audioConstraints)
-        .then(async (micStream) => {
-            if (request !== microphoneRequest) {
-                await stopAudioTracks(micStream);
-                return;
-            }
-            micStream.getAudioTracks().forEach((track) => {
-                track.enabled = myAudioStatus;
-            });
-            myAudio.srcObject = micStream;
-            localAudioMediaStream = micStream;
-            logStreamSettingsInfo('Success attached local microphone stream', micStream);
-            getMicrophoneVolumeIndicator(micStream);
+    try {
+        const micStream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+        await attachLocalMicrophone(micStream);
+    } catch (err) {
+        console.error('[Error] changeLocalMicrophone', err);
+        userLog('error', 'Error while swapping local microphone' + err);
+        // Don't leave the user without a microphone: go back to the previous one
+        if (request !== microphoneRequest || !previousDeviceId || previousDeviceId === deviceId) return;
+        try {
+            const micStream = await navigator.mediaDevices.getUserMedia(getAudioConstraints(previousDeviceId));
+            await attachLocalMicrophone(micStream);
+            selectDeviceInSelects([audioInputSelect, initMicrophoneSelect], previousDeviceId);
+        } catch (restoreErr) {
+            console.error('[Error] unable to restore previous microphone', restoreErr);
+        }
+    }
 
-            if (lsSettings.mic_noise_suppression && buttons.settings.customNoiseSuppression) {
-                await enableNoiseSuppression();
-            } else {
-                await refreshMyStreamToPeers(micStream, true);
-            }
-        })
-        .catch((err) => {
-            console.error('[Error] changeLocalMicrophone', err);
-            userLog('error', 'Error while swapping local microphone' + err);
+    /**
+     * Attach the new microphone stream and share it with the peers
+     * @param {MediaStream} micStream
+     */
+    async function attachLocalMicrophone(micStream) {
+        if (request !== microphoneRequest) {
+            await stopAudioTracks(micStream);
+            return;
+        }
+        micStream.getAudioTracks().forEach((track) => {
+            track.enabled = myAudioStatus;
         });
+        myAudio.srcObject = micStream;
+        localAudioMediaStream = micStream;
+        logStreamSettingsInfo('Success attached local microphone stream', micStream);
+        getMicrophoneVolumeIndicator(micStream);
+
+        if (lsSettings.mic_noise_suppression && buttons.settings.customNoiseSuppression) {
+            await enableNoiseSuppression();
+        } else {
+            await refreshMyStreamToPeers(micStream, true);
+        }
+    }
 }
 
 /**
@@ -3122,6 +3187,36 @@ async function applyNoiseSuppression(enabled) {
 
     syncNoiseSuppressionUI();
     return lsSettings.mic_noise_suppression;
+}
+
+/**
+ * Presenter: enable or disable noise suppression for everyone except yourself.
+ * @param {boolean} enabled
+ */
+function setNoiseSuppressionForAllPeers(enabled) {
+    if (!buttons.settings.customNoiseSuppression) return;
+    if (!thereArePeerConnections()) {
+        return toastMessage('info', 'No participants detected');
+    }
+    emitPeersAction(enabled ? 'noiseSuppressionOn' : 'noiseSuppressionOff');
+    userLog(
+        'toast',
+        enabled ? 'Noise suppression enabled for everyone 👍' : 'Noise suppression disabled for everyone 👍'
+    );
+}
+
+/**
+ * Apply a noise suppression change requested by the presenter.
+ * @param {boolean} enabled
+ */
+async function handleNoiseSuppressionRequest(enabled) {
+    if (!buttons.settings.customNoiseSuppression || !isRNNoiseSupported) return;
+    if (!!lsSettings.mic_noise_suppression === enabled) return;
+    await applyNoiseSuppression(enabled);
+    userLog(
+        'toast',
+        enabled ? 'The presenter enabled noise suppression for you' : 'The presenter disabled noise suppression for you'
+    );
 }
 
 /**
@@ -4238,15 +4333,19 @@ async function initEnumerateDevices() {
 async function initEnumerateAudioDevices() {
     if (isEnumerateAudioDevices) return;
     // allow the audio
-    await navigator.mediaDevices
-        .getUserMedia({ audio: true })
-        .then(async (stream) => {
-            await enumerateAudioDevices(stream);
-            useAudio = true;
-        })
-        .catch(() => {
-            useAudio = false;
-        });
+    try {
+        const stream = await getUserMediaWithDeviceFallback('audioinput', (deviceId) =>
+            deviceId ? { audio: { deviceId: { exact: deviceId } } } : { audio: true }
+        );
+        const deviceId = getStreamDeviceId(stream);
+        await enumerateAudioDevices(stream);
+        selectDeviceInSelects([audioInputSelect, initMicrophoneSelect], deviceId);
+        useAudio = true;
+    } catch (err) {
+        console.warn('Audio devices not available', err);
+        notifyBusyDevice('audio', err);
+        useAudio = false;
+    }
 }
 
 /**
@@ -4256,15 +4355,88 @@ async function initEnumerateAudioDevices() {
 async function initEnumerateVideoDevices() {
     if (isEnumerateVideoDevices) return;
     // allow the video
-    await navigator.mediaDevices
-        .getUserMedia({ video: true })
-        .then(async (stream) => {
-            await enumerateVideoDevices(stream);
-            useVideo = true;
-        })
-        .catch(() => {
-            useVideo = false;
-        });
+    try {
+        const stream = await getUserMediaWithDeviceFallback('videoinput', (deviceId) =>
+            deviceId ? { video: { deviceId: { exact: deviceId } } } : { video: true }
+        );
+        const deviceId = getStreamDeviceId(stream);
+        await enumerateVideoDevices(stream);
+        selectDeviceInSelects([videoSelect, initVideoSelect], deviceId);
+        useVideo = true;
+    } catch (err) {
+        console.warn('Video devices not available', err);
+        notifyBusyDevice('video', err);
+        useVideo = false;
+    }
+}
+
+/**
+ * Request a media stream from the default device; if it is busy or broken
+ * (e.g. held by OBS) try the other devices of the same kind before giving up.
+ * @param {string} kind 'audioinput' or 'videoinput'
+ * @param {function} getConstraints builds the constraints for a device id (undefined = default device)
+ * @returns {Promise<MediaStream>} the first stream that could be opened
+ * @throws the error of the default device when no device could be opened
+ */
+async function getUserMediaWithDeviceFallback(kind, getConstraints) {
+    try {
+        return await navigator.mediaDevices.getUserMedia(getConstraints());
+    } catch (err) {
+        // Other devices cannot help if the user denied the permission or the constraints are invalid
+        if (['NotAllowedError', 'PermissionDeniedError', 'TypeError'].includes(err.name)) throw err;
+
+        console.warn(`Default ${kind} unavailable [${err.name}], trying the other devices`);
+        let devices = [];
+        try {
+            devices = await navigator.mediaDevices.enumerateDevices();
+        } catch (enumErr) {
+            console.warn('Unable to enumerate devices', enumErr);
+        }
+        const candidates = devices.filter((d) => d.kind === kind && d.deviceId && d.deviceId !== 'default');
+        for (const device of candidates) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(getConstraints(device.deviceId));
+                console.log(`Using ${kind} fallback device`, device.label || device.deviceId);
+                return stream;
+            } catch (fallbackErr) {
+                console.warn(`Fallback ${kind} unavailable`, device.label || device.deviceId, fallbackErr.name);
+            }
+        }
+        throw err;
+    }
+}
+
+/**
+ * Get the id of the device behind the first track of a stream
+ * @param {MediaStream} stream
+ * @returns {string|undefined} device id
+ */
+function getStreamDeviceId(stream) {
+    const track = stream?.getTracks?.()[0];
+    return track?.getSettings?.().deviceId;
+}
+
+/**
+ * Select the device in the given select elements, if present
+ * @param {Array<HTMLSelectElement>} selects
+ * @param {string} deviceId
+ */
+function selectDeviceInSelects(selects, deviceId) {
+    if (!deviceId) return;
+    selects.forEach((select) => {
+        if (select && selectOptionByValueExist(select, deviceId)) select.value = deviceId;
+    });
+}
+
+/**
+ * Tell the user that a device is busy or broken (not simply missing or denied)
+ * @param {string} mediaType 'audio' or 'video'
+ * @param {object} err
+ */
+function notifyBusyDevice(mediaType, err) {
+    if (!['NotReadableError', 'TrackStartError', 'AbortError'].includes(err?.name)) return;
+    const device = mediaType === 'audio' ? 'microphone' : 'camera';
+    userLog('warning', `The ${device} is busy or unavailable (maybe used by another app). Try another device.`, 6000);
 }
 
 /**
@@ -4360,13 +4532,13 @@ async function addChild(device, els) {
         option.value = deviceId;
         switch (kind) {
             case 'videoinput':
-                option.innerText = `📹 ` + label || `📹 camera ${el.length + 1}`;
+                option.innerText = `📹 ` + (label || `camera ${el.length + 1}`);
                 break;
             case 'audioinput':
-                option.innerText = `🎤 ` + label || `🎤 microphone ${el.length + 1}`;
+                option.innerText = `🎤 ` + (label || `microphone ${el.length + 1}`);
                 break;
             case 'audiooutput':
-                option.innerText = `🔈 ` + label || `🔈 speaker ${el.length + 1}`;
+                option.innerText = `🔈 ` + (label || `speaker ${el.length + 1}`);
                 break;
             default:
                 break;
@@ -4523,19 +4695,25 @@ async function setupLocalVideoMedia() {
 
     console.log('Requesting access to video inputs');
 
-    const videoConstraints = useVideo ? getVideoConstraints('default') : false;
+    const videoConstraints = getVideoConstraints('default');
 
     try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
+        const stream = await getUserMediaWithDeviceFallback('videoinput', (deviceId) => ({
+            video: deviceId ? { ...videoConstraints, deviceId: { exact: deviceId } } : videoConstraints,
+        }));
         await updateLocalVideoMediaStream(stream);
     } catch (err) {
         console.error('Error accessing video device', err);
         console.warn('Fallback to default constraints');
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const stream = await getUserMediaWithDeviceFallback('videoinput', (deviceId) => ({
+                video: deviceId ? { deviceId: { exact: deviceId } } : true,
+            }));
             await updateLocalVideoMediaStream(stream);
         } catch (fallbackErr) {
             console.error('Error accessing video device with default constraints', fallbackErr);
+            // A failing camera must not block the microphone or the join
+            useVideo = false;
             handleMediaError('video', fallbackErr);
         }
     }
@@ -4548,6 +4726,7 @@ async function setupLocalVideoMedia() {
         if (stream) {
             stream = await prepareCameraBackground(stream);
             localVideoMediaStream = stream;
+            selectDeviceInSelects([videoSelect, initVideoSelect], getStreamDeviceId(stream));
             await loadLocalMedia(stream, 'video');
             console.log('Access granted to video device');
         }
@@ -4572,7 +4751,9 @@ async function setupLocalAudioMedia() {
     const audioConstraints = useAudio ? getAudioConstraints() : { audio: false };
 
     try {
-        const stream = await navigator.mediaDevices.getUserMedia(audioConstraints);
+        const stream = await getUserMediaWithDeviceFallback('audioinput', (deviceId) =>
+            deviceId ? getAudioConstraints(deviceId) : audioConstraints
+        );
         if (stream) {
             /* 
                 Verify the audio track is live – on some mobile devices getUserMedia
@@ -4590,6 +4771,7 @@ async function setupLocalAudioMedia() {
                 activeStream = await navigator.mediaDevices.getUserMedia({ audio: true });
             }
 
+            selectDeviceInSelects([audioInputSelect, initMicrophoneSelect], getStreamDeviceId(activeStream));
             await loadLocalMedia(activeStream, 'audio');
             if (useAudio) {
                 localAudioMediaStream = activeStream;
@@ -4605,20 +4787,21 @@ async function setupLocalAudioMedia() {
             }
         }
     } catch (err) {
+        // A failing microphone must not block the join
+        useAudio = false;
         handleMediaError('audio', err);
     }
 }
 
 /**
- * Handle media access error.
+ * Handle media access error without blocking the join: the user is informed
+ * and can continue without this device or pick another one.
  * https://blog.addpipe.com/common-getusermedia-errors/
  *
  * @param {string} mediaType - 'video' or 'audio'
  * @param {object} err - The error object
  */
 function handleMediaError(mediaType, err) {
-    playSound('alert');
-    //
     let errMessage = err;
 
     switch (err.name) {
@@ -4645,25 +4828,10 @@ function handleMediaError(mediaType, err) {
             break;
     }
 
-    // Print message to inform user
-    const $html = `
-        <ul style="text-align: left">
-            <li>Media type: ${mediaType}</li>
-            <li>Error name: ${err.name}</li>
-            <li>Error message: <p style="color: red">${errMessage}</p></li>
-            <li>Common: <a href="https://blog.addpipe.com/common-getusermedia-errors" target="_blank">getUserMedia errors</a></li>
-        </ul>
-    `;
-
-    msgHTML(null, images.forbidden, 'Access denied', $html, 'center', '/');
-
-    /*
-        it immediately stops the execution of the current function and jumps to the nearest enclosing try...catch block or, 
-        if none exists, it interrupts the script execution and displays an error message in the console.
-    */
-    throw new Error(
-        `Access denied for ${mediaType} device [${err.name}]: ${errMessage} check the common getUserMedia errors: https://blog.addpipe.com/common-getusermedia-errors/`
+    console.error(
+        `Unable to access ${mediaType} device [${err.name}]: ${errMessage} check the common getUserMedia errors: https://blog.addpipe.com/common-getusermedia-errors/`
     );
+    userLog('warning', `Unable to use the ${mediaType} device: ${errMessage}`, 6000);
 }
 
 /**
@@ -8944,6 +9112,8 @@ function setupMySettings() {
     // audio options
     switchNoiseSuppression.onchange = async (e) => {
         if (!buttons.settings.customNoiseSuppression) return;
+        lsSettings.mic_noise_suppression_user_set = true;
+        lS.setSettings(lsSettings);
         await applyNoiseSuppression(e.currentTarget.checked);
         switchNoiseSuppression.blur();
     };
@@ -9130,11 +9300,18 @@ function setupMySettings() {
         });
         syncCaptionEveryoneButtons(false);
     });
+    noiseSuppressionOnEveryoneBtn?.addEventListener('click', () => setNoiseSuppressionForAllPeers(true));
+    noiseSuppressionOffEveryoneBtn?.addEventListener('click', () => setNoiseSuppressionForAllPeers(false));
+    noiseSuppressionOnEveryoneBtnDesktop?.addEventListener('click', () => noiseSuppressionOnEveryoneBtn?.click());
+    noiseSuppressionOffEveryoneBtnDesktop?.addEventListener('click', () => noiseSuppressionOffEveryoneBtn?.click());
     muteEveryoneBtn.addEventListener('click', (e) => {
         disableAllPeers('audio');
     });
     hideEveryoneBtn.addEventListener('click', (e) => {
         disableAllPeers('video');
+    });
+    stopScreenEveryoneBtn.addEventListener('click', (e) => {
+        disableAllPeers('screen');
     });
     ejectEveryoneBtn.addEventListener('click', (e) => {
         ejectEveryone();
@@ -9143,6 +9320,7 @@ function setupMySettings() {
     captionEveryoneStopBtnDesktop?.addEventListener('click', () => captionEveryoneStopBtn.click());
     muteEveryoneBtnDesktop?.addEventListener('click', () => muteEveryoneBtn.click());
     hideEveryoneBtnDesktop?.addEventListener('click', () => hideEveryoneBtn.click());
+    stopScreenEveryoneBtnDesktop?.addEventListener('click', () => stopScreenEveryoneBtn.click());
     ejectEveryoneBtnDesktop?.addEventListener('click', () => ejectEveryoneBtn.click());
     syncCaptionEveryoneButtons(false);
     lockRoomBtn.addEventListener('click', (e) => {
@@ -13138,9 +13316,12 @@ function getMsgerRoomActionsDropdownMarkup(idSuffix = '') {
     return `
         ${getMsgerParticipantDropdownActionMarkup(`captionEveryoneBtn${idSuffix}`, 'fas fa-play', 'Start captions')}
         ${getMsgerParticipantDropdownActionMarkup(`captionEveryoneStopBtn${idSuffix}`, 'fas fa-stop', 'Stop captions')}
+        ${getMsgerParticipantDropdownActionMarkup(`noiseSuppressionOnEveryoneBtn${idSuffix}`, 'fas fa-wave-square', 'Enable noise suppression')}
+        ${getMsgerParticipantDropdownActionMarkup(`noiseSuppressionOffEveryoneBtn${idSuffix}`, 'fas fa-volume-xmark', 'Disable noise suppression')}
         ${getMsgerParticipantDropdownDividerMarkup()}
         ${getMsgerParticipantDropdownActionMarkup(`muteEveryoneBtn${idSuffix}`, 'fas fa-microphone', 'Mute everyone', 'danger')}
         ${getMsgerParticipantDropdownActionMarkup(`hideEveryoneBtn${idSuffix}`, 'fas fa-video', 'Hide everyone', 'danger')}
+        ${getMsgerParticipantDropdownActionMarkup(`stopScreenEveryoneBtn${idSuffix}`, 'fas fa-desktop', 'Stop screen everyone', 'danger')}
         ${getMsgerParticipantDropdownActionMarkup(`ejectEveryoneBtn${idSuffix}`, 'fas fa-right-from-bracket', 'Eject everyone', 'danger')}
     `;
 }
@@ -14785,6 +14966,10 @@ function handlePeerAction(config) {
         case 'hideVideo':
             setMyVideoOff(peer_name);
             break;
+        case 'noiseSuppressionOn':
+        case 'noiseSuppressionOff':
+            handleNoiseSuppressionRequest(peer_action === 'noiseSuppressionOn');
+            break;
         case 'stopScreen':
             setMyScreenOff(peer_name);
             break;
@@ -15191,24 +15376,43 @@ function setMyScreenOff(peer_name) {
 }
 
 /**
- * Mute or Hide everyone except yourself
- * @param {string} element type audio/video
+ * Mute, Hide or Stop screen sharing of everyone except yourself
+ * @param {string} element type audio/video/screen
  */
 function disableAllPeers(element) {
     if (!thereArePeerConnections()) {
         return toastMessage('info', 'No participants detected');
     }
+    const dialogs = {
+        audio: {
+            imageUrl: images.audioOff,
+            title: 'Mute everyone except yourself?',
+            text: "Once muted, you won't be able to unmute them, but they can unmute themselves at any time.",
+            confirmButtonText: 'Mute',
+        },
+        video: {
+            imageUrl: images.videoOff,
+            title: 'Hide everyone except yourself?',
+            text: "Once hided, you won't be able to unhide them, but they can unhide themselves at any time.",
+            confirmButtonText: 'Hide',
+        },
+        screen: {
+            imageUrl: images.screenOff,
+            title: 'Stop screen sharing for everyone except yourself?',
+            text: "Once stopped, you won't be able to start them, but they can start screen sharing themselves at any time.",
+            confirmButtonText: 'Stop',
+        },
+    };
+    const dialog = dialogs[element];
+    if (!dialog) return;
     Swal.fire({
         background: swBg,
         position: 'center',
-        imageUrl: element == 'audio' ? images.audioOff : images.videoOff,
-        title: element == 'audio' ? 'Mute everyone except yourself?' : 'Hide everyone except yourself?',
-        text:
-            element == 'audio'
-                ? "Once muted, you won't be able to unmute them, but they can unmute themselves at any time."
-                : "Once hided, you won't be able to unhide them, but they can unhide themselves at any time.",
+        imageUrl: dialog.imageUrl,
+        title: dialog.title,
+        text: dialog.text,
         showCancelButton: true,
-        confirmButtonText: element == 'audio' ? `Mute` : `Hide`,
+        confirmButtonText: dialog.confirmButtonText,
         cancelButtonText: 'Cancel',
         showClass: { popup: 'animate__animated animate__fadeInDown' },
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
@@ -15222,6 +15426,10 @@ function disableAllPeers(element) {
                 case 'video':
                     userLog('toast', 'Hide everyone 👍');
                     emitPeersAction('hideVideo');
+                    break;
+                case 'screen':
+                    userLog('toast', 'Stop screen 👍');
+                    emitPeersAction('stopScreen');
                     break;
                 default:
                     break;
@@ -18384,7 +18592,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.50',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.54',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
@@ -19372,6 +19580,8 @@ function setupQuickDeviceSwitchDropdowns() {
         row.addEventListener('click', async (e) => {
             e.stopPropagation();
             row.disabled = true;
+            lsSettings.mic_noise_suppression_user_set = true;
+            lS.setSettings(lsSettings);
             await applyNoiseSuppression(!lsSettings.mic_noise_suppression);
             row.disabled = false;
         });
