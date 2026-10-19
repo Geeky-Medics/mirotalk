@@ -257,6 +257,9 @@ body {
     z-index: 9999;
     color: #fff;
     padding: 30px;
+    width: max-content;
+    max-width: min(420px, calc(100vw - 64px));
+    box-sizing: border-box;
     text-align: center;
     border-radius: 10px;
     background: var(--btns-bg-color, rgba(0, 0, 0, 0.7));
@@ -275,6 +278,7 @@ body {
 #loadingDiv p {
     max-width: 35ch;
     margin-inline: auto;
+    text-wrap: balance;
 }
 
 /* Custom CSS spinner */
