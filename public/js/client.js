@@ -14,7 +14,7 @@
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.1.78
+ * @version 2.1.81
  *
  */
 
@@ -1621,6 +1621,7 @@ async function initClientPeer() {
     // on receiving data from signaling server...
     signalingSocket.on('connect', handleConnect);
     signalingSocket.on('unauthorized', handleUnauthorized);
+    signalingSocket.on('roomNotAllowed', handleRoomNotAllowed);
     signalingSocket.on('roomIsLocked', handleUnlockTheRoom);
     signalingSocket.on('roomIsJoinLocked', handleRoomJoinLocked);
     signalingSocket.on('roomAction', handleRoomAction);
@@ -1793,6 +1794,26 @@ function handleUnauthorized() {
     }).then(() => {
         // Login required to join room
         openURL(`/login/?room=${roomId}`);
+    });
+}
+
+/**
+ * HOST_USERS allowed_rooms: the logged-in user can't open or join this room
+ */
+function handleRoomNotAllowed() {
+    playSound('alert');
+    Swal.fire({
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        background: swBg,
+        imageUrl: images.forbidden,
+        title: 'Room not allowed',
+        text: 'Your account is not allowed to join this room',
+        confirmButtonText: `OK`,
+        showClass: { popup: 'animate__animated animate__fadeInDown' },
+        hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+    }).then(() => {
+        openURL('/');
     });
 }
 
@@ -2142,11 +2163,12 @@ function mergeConfig(target, source) {
     return output;
 }
 
-// Name verified by the OIDC provider (OIDC_LOCK_USERNAME); the server enforces it, the UI shows it read-only
+// Name verified by the server: OIDC provider (OIDC_LOCK_USERNAME) or HOST_USERS displayname.
+// The server enforces it, the UI shows it read-only
 let oidcIdentity = { checked: false, name: null, token: null };
 
 /**
- * Load the verified OIDC identity (fresh token on every call while the lock is active)
+ * Load the verified identity (fresh OIDC token on every call while the lock is active)
  */
 async function loadOidcIdentity() {
     if (oidcIdentity.checked && !oidcIdentity.name) return;
@@ -2159,6 +2181,18 @@ async function loadOidcIdentity() {
     } catch (err) {
         console.warn('OIDC identity not available', err);
         oidcIdentity = { checked: true, name: null, token: null };
+    }
+    if (!oidcIdentity.name && myToken) {
+        try {
+            const response = await fetch('/hostIdentity', {
+                credentials: 'same-origin',
+                headers: { Authorization: `Bearer ${myToken}` },
+            });
+            const data = response.ok ? await response.json() : null;
+            if (data?.locked && data.name) oidcIdentity = { checked: true, name: filterXSS(data.name), token: null };
+        } catch (err) {
+            console.warn('Host identity not available', err);
+        }
     }
     if (oidcIdentity.name) {
         myPeerNameSet.value = oidcIdentity.name;
@@ -3319,12 +3353,34 @@ async function getCreateRoomToken(room_id) {
 }
 
 /**
+ * Short-lived token proving the OIDC session is a configured presenter (PRESENTERS), null otherwise
+ * @param {string} room_id
+ * @returns {Promise<string|null>} token or null
+ */
+async function getOidcPresenterToken(room_id) {
+    try {
+        const response = await fetch(`/oidcPresenterToken?room=${encodeURIComponent(room_id)}`, {
+            credentials: 'same-origin',
+        });
+        if (!response.ok) return null;
+        const data = await response.json();
+        return data?.token || null;
+    } catch (err) {
+        console.warn('OIDC presenter token not available', err);
+        return null;
+    }
+}
+
+/**
  * join to channel and send some peer info
  */
 async function joinToChannel() {
     console.log('12. join to channel', roomId);
     await loadOidcIdentity();
-    const createRoomToken = await getCreateRoomToken(roomId);
+    const [createRoomToken, oidcPresenterToken] = await Promise.all([
+        getCreateRoomToken(roomId),
+        getOidcPresenterToken(roomId),
+    ]);
     sendToServer('join', {
         join_data_time: getDataTimeString(),
         channel: roomId,
@@ -3336,6 +3392,7 @@ async function joinToChannel() {
         peer_token: myToken,
         create_room_token: createRoomToken,
         identity_token: oidcIdentity.token,
+        oidc_presenter_token: oidcPresenterToken,
         peer_video: useVideo,
         peer_audio: useAudio,
         peer_video_status: myVideoStatus,
@@ -19184,7 +19241,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.78',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.1.81',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {

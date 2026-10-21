@@ -43,7 +43,7 @@ dependencies: {
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.1.78
+ * @version 2.1.81
  *
  */
 
@@ -84,6 +84,8 @@ const nodemailer = require('./lib/nodemailer');
 const packageJson = require('../../package.json');
 
 const { loginLimiter, createRoomTokenLimiter } = require('./middleware/rateLimiter');
+const { isOidcConfiguredPresenter } = require('./oidcPresenter');
+const { parseHostUsers, isRoomAllowedForUser } = require('./hostUsers');
 
 const port = config.server.port;
 const host = config.server.host;
@@ -137,7 +139,10 @@ const io = new Server({
 const hostCfg = {
     protected: config.host.protected,
     user_auth: config.host.userAuth,
-    users: config.host.users,
+    // Normalized here too, so an older config.js (raw JSON users) still gets displayname/allowed_rooms defaults
+    users: parseHostUsers(
+        Array.isArray(config.host.users) && config.host.users.length ? config.host.users : process.env.HOST_USERS
+    ),
     authenticated: !config.host.protected,
     maxRoomParticipants: config.host.maxRoomParticipants,
     showActiveRooms: config.host.showActiveRooms,
@@ -237,6 +242,26 @@ function isCreateRoomTokenValid(token, roomId) {
 
 // Room presenters
 const roomPresenters = config.presenters;
+
+// Short-lived token bound to a room, issued by GET /oidcPresenterToken only to an OIDC session whose
+// verified email or sub is in PRESENTERS. The socket carries no OIDC session, so it proves it at join.
+const OIDC_PRESENTER_TOKEN_EXP = '2m';
+
+function createOidcPresenterToken(roomId) {
+    return jwt.sign({ scope: 'oidc-presenter', roomId: String(roomId) }, jwtKeys.oidcPresenter, {
+        expiresIn: OIDC_PRESENTER_TOKEN_EXP,
+    });
+}
+
+function isOidcPresenterTokenValid(token, roomId) {
+    if (!OIDC.enabled || !token || typeof token !== 'string') return false;
+    try {
+        const decoded = jwt.verify(token, jwtKeys.oidcPresenter, JWT_VERIFY_OPTIONS);
+        return decoded?.scope === 'oidc-presenter' && decoded.roomId === String(roomId);
+    } catch {
+        return false;
+    }
+}
 
 // Swagger config
 const yaml = require('js-yaml');
@@ -776,6 +801,28 @@ app.get('/createRoomToken', createRoomTokenLimiter, (req, res) => {
     return res.json({ required: true, token: createCreateRoomToken(room) });
 });
 
+// Issue a short-lived token proving the OIDC session is a configured presenter (PRESENTERS matched
+// against the verified email or sub). The Socket.IO `join` event validates it for this room.
+app.get('/oidcPresenterToken', (req, res) => {
+    const { room } = checkXSS(req.query);
+
+    if (!room || !Validate.isValidRoomName(room)) {
+        return res.status(400).json({ message: 'Invalid room' });
+    }
+
+    res.set('Cache-Control', 'no-store');
+
+    if (!OIDC.enabled || !req.oidc?.isAuthenticated?.()) {
+        return res.json({ token: null });
+    }
+
+    if (!isOidcConfiguredPresenter(req.oidc.user, roomPresenters)) {
+        return res.json({ token: null });
+    }
+
+    return res.json({ token: createOidcPresenterToken(room) });
+});
+
 // Issue a short-lived token with the display name verified by the OIDC provider, so the client
 // can show it read-only and the Socket.IO `join` event can enforce it (OIDC_LOCK_USERNAME).
 app.get('/oidcIdentity', (req, res) => {
@@ -792,6 +839,26 @@ app.get('/oidcIdentity', (req, res) => {
     if (!name) return res.json({ locked: false });
 
     return res.json({ locked: true, name, token: createIdentityToken(name) });
+});
+
+// Display name configured for the HOST_USERS login in the Bearer peer token. The Socket.IO `join` event
+// enforces it from the token itself; this only lets the client show it read-only.
+app.get('/hostIdentity', async (req, res) => {
+    res.set('Cache-Control', 'no-store');
+
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+
+    if (!token || !(await isValidToken(token))) return res.json({ locked: false });
+
+    try {
+        const { username, password } = checkXSS(decodeToken(token));
+        const hostUser = getAuthPeer(username, password);
+        if (!hostUser?.displayname) return res.json({ locked: false });
+        return res.json({ locked: true, name: String(checkXSS(hostUser.displayname)).slice(0, 254) });
+    } catch {
+        return res.json({ locked: false });
+    }
 });
 
 // Handle Direct join room with params
@@ -842,9 +909,15 @@ app.get('/join/', async (req, res) => {
                 peerUsername = username;
                 peerPassword = password;
                 // Check if valid peer
-                isPeerValid = isAuthPeer(username, password);
+                const hostUser = getAuthPeer(username, password);
+                isPeerValid = !!hostUser;
                 // Check if presenter
                 isPeerPresenter = presenter === '1' || presenter === 'true';
+                // HOST_USERS allowed_rooms: this login can't be used for this room
+                if (hostUser && !isRoomAllowedForUser(hostUser, room)) {
+                    log.warn('Direct Room Join not allowed for this user', { username, room });
+                    return res.status(403).json({ message: 'Room not allowed for this user' });
+                }
             } catch (err) {
                 // Invalid token
                 log.error('Direct Join JWT error', err.message);
@@ -954,7 +1027,10 @@ app.post('/login', loginLimiter, (req, res) => {
         return res.status(400).json({ message: 'Invalid password' });
     }
 
-    const isPeerValid = isAuthPeer(username, password);
+    const hostUser = getAuthPeer(username, password);
+    const isPeerValid = !!hostUser;
+    const displayname = hostUser?.displayname || username;
+    const allowedRooms = hostUser?.allowed_rooms || [];
 
     // Peer valid going to auth as host
     if (hostCfg.protected && isPeerValid && !hostCfg.authenticated) {
@@ -966,7 +1042,7 @@ app.post('/login', loginLimiter, (req, res) => {
             authorizedIps: authHost.getAuthorizedIPs(),
         });
         const token = encodeToken({ username: username, password: password, presenter: true });
-        return res.status(200).json({ message: token });
+        return res.status(200).json({ message: token, displayname, allowedRooms });
     }
 
     // Peer auth valid
@@ -974,7 +1050,7 @@ app.post('/login', loginLimiter, (req, res) => {
         log.debug('PEER LOGIN OK', { ip: ip, authorized: true });
         const isPresenter = roomPresenters && roomPresenters.includes(username).toString();
         const token = encodeToken({ username: username, password: password, presenter: isPresenter });
-        return res.status(200).json({ message: token });
+        return res.status(200).json({ message: token, displayname, allowedRooms });
     } else {
         return res.status(401).json({ message: 'unauthorized' });
     }
@@ -1563,6 +1639,7 @@ io.sockets.on('connect', async (socket) => {
             peer_token,
             create_room_token,
             identity_token,
+            oidc_presenter_token,
             peer_video,
             peer_audio,
             peer_video_status,
@@ -1585,7 +1662,7 @@ io.sockets.on('connect', async (socket) => {
 
         // Security: an OIDC-authenticated peer joins with the name verified by the identity provider
         const verifiedPeerName = getVerifiedIdentityName(identity_token);
-        const peer_name = verifiedPeerName || requested_peer_name;
+        let peer_name = verifiedPeerName || requested_peer_name;
         if (verifiedPeerName) {
             socket.verifiedPeerName = verifiedPeerName;
             config.peer_name = verifiedPeerName;
@@ -1593,6 +1670,7 @@ io.sockets.on('connect', async (socket) => {
 
         let is_presenter = true;
         let authenticatedUsername = null;
+        let authenticatedHostUser = null;
 
         // Is this join opening a brand new room (no presenter/host yet)? Computed from
         // current state BEFORE any room structure is created, so a rejected join never
@@ -1627,15 +1705,23 @@ io.sockets.on('connect', async (socket) => {
 
                     const { username, password, presenter } = checkXSS(decodeToken(peer_token));
 
-                    const isPeerValid = isAuthPeer(username, password);
+                    const hostUser = getAuthPeer(username, password);
+                    const isPeerValid = !!hostUser;
 
                     if (!isPeerValid) {
                         // redirect peer to login page
                         return socket.emit('unauthorized');
                     }
 
+                    // HOST_USERS allowed_rooms: this login can't be used for this room
+                    if (!isRoomAllowedForUser(hostUser, channel)) {
+                        log.warn('[' + socket.id + '] Room not allowed for this user', { username, channel });
+                        return socket.emit('roomNotAllowed');
+                    }
+
                     // Presenter if token 'presenter' is '1'/'true' or first to join room
                     authenticatedUsername = username;
+                    authenticatedHostUser = hostUser;
                     is_presenter = presenter === '1' || presenter === 'true' || isRoomNew;
 
                     log.debug('[' + socket.id + '] JOIN ROOM - USER AUTH check peer', {
@@ -1660,6 +1746,17 @@ io.sockets.on('connect', async (socket) => {
         if (!(channel in channels)) channels[channel] = {};
         if (!(channel in peers)) peers[channel] = {};
         if (!(channel in presenters)) presenters[channel] = {};
+
+        // Security: a host user with a configured displayname joins with it (OIDC verified name wins)
+        if (!verifiedPeerName && authenticatedHostUser?.displayname) {
+            peer_name = String(checkXSS(authenticatedHostUser.displayname)).slice(0, 254);
+            socket.verifiedPeerName = peer_name;
+            config.peer_name = peer_name;
+        }
+
+        // Proof of an OIDC session listed in PRESENTERS (verified email or sub), bound to this room
+        const oidcPresenter = isOidcPresenterTokenValid(oidc_presenter_token, channel);
+        if (oidcPresenter) is_presenter = true;
 
         // room locked by the participants can't join
         if (peers[channel]['lock'] === true) {
@@ -1704,9 +1801,12 @@ io.sockets.on('connect', async (socket) => {
             }
         }
 
-        // Match configured presenters against authenticated account names,
-        // never client-selected display names.
-        if (authenticatedUsername && roomPresenters && roomPresenters.includes(authenticatedUsername)) {
+        // Match configured presenters against authenticated account names or the OIDC
+        // verified email/sub, never client-selected display names.
+        if (
+            oidcPresenter ||
+            (authenticatedUsername && roomPresenters && roomPresenters.includes(authenticatedUsername))
+        ) {
             presenters[channel][socket.id] = presenter;
         } else {
             // if not match the presenters username, the first one join room is the presenter
@@ -1962,7 +2062,7 @@ io.sockets.on('connect', async (socket) => {
         const { room_id, peer_name_old, peer_name_new, peer_avatar } = config;
 
         if (socket.verifiedPeerName) {
-            return log.debug('[' + socket.id + '] peerName change blocked: name is verified by OIDC');
+            return log.debug('[' + socket.id + '] peerName change blocked: name is verified (OIDC or HOST_USERS)');
         }
 
         let peer_id_to_update = null;
@@ -3326,7 +3426,18 @@ function isPeerPresenter(room_id, peer_id, peer_name, peer_uuid) {
  * @returns Boolean true/false
  */
 function isAuthPeer(username, password) {
-    return hostCfg.users && hostCfg.users.some((user) => user.username === username && user.password === password);
+    return !!getAuthPeer(username, password);
+}
+
+/**
+ * Get the HOST_USERS entry matching the credentials
+ * @param {string} username
+ * @param {string} password
+ * @returns {object|null} user { username, password, displayname, allowed_rooms } or null
+ */
+function getAuthPeer(username, password) {
+    if (!Array.isArray(hostCfg.users)) return null;
+    return hostCfg.users.find((user) => user && user.username === username && user.password === password) || null;
 }
 
 /**
