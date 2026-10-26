@@ -43,7 +43,7 @@ dependencies: {
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.2.10
+ * @version 2.2.32
  *
  */
 
@@ -70,6 +70,8 @@ const MattermostController = require('./mattermost');
 const Validate = require('./validate');
 const RoomPassword = require('./roomPassword');
 const RoomTimeLimit = require('./roomTimeLimit');
+const RoomPolls = require('./roomPolls');
+const RoomBreakouts = require('./roomBreakouts');
 const HtmlInjector = require('./htmlInjector');
 const Host = require('./host');
 const Logs = require('./logs');
@@ -261,6 +263,56 @@ function isOidcPresenterTokenValid(token, roomId) {
         return decoded?.scope === 'oidc-presenter' && decoded.roomId === String(roomId);
     } catch {
         return false;
+    }
+}
+
+// Breakout rooms (disabled by default): when disabled every breakout request is ignored.
+// Config files created before this option fall back to the env variable.
+const breakoutRoomsEnabled = (config.breakoutRooms?.enabled ?? process.env.BREAKOUT_ROOMS_ENABLED === 'true') === true;
+
+// Breakout rooms: ticket issued by the server with each move order, proving at join time that
+// the peer was sent to this room (bypasses room creation/lock checks and carries the presenter role).
+// A ticket is honored while its session is open; a ticket back to the main room also stays valid
+// for a short time after the session is closed, so the last peers can still return.
+// Tickets are tracked by id, so moving a peer again or kicking it out revokes them.
+const BREAKOUT_TICKET_EXP = '12h';
+const BREAKOUT_RETURN_WINDOW_MS = RoomBreakouts.ORPHAN_STATE_TTL_MS;
+// Close a session when all its rooms stayed empty for this long (moves reload the page, so rooms are briefly empty)
+const BREAKOUT_IDLE_MS = 60 * 1000;
+
+function createBreakoutToken({ room, main, sid, uuid, presenter }) {
+    const jti = uuidV4();
+    const token = jwt.sign(
+        {
+            scope: 'breakout',
+            room: String(room),
+            main: String(main),
+            sid: String(sid),
+            uuid: String(uuid || ''),
+            presenter: presenter === true,
+        },
+        jwtKeys.breakout,
+        { expiresIn: BREAKOUT_TICKET_EXP, jwtid: jti }
+    );
+    return { token, jti };
+}
+
+/**
+ * @param {string} token
+ * @param {string} roomId room being joined
+ * @param {string} peerUuid peer_uuid sent with the join
+ * @returns {{ main: string, presenter: boolean, jti: string }|null} valid ticket for this room and peer
+ */
+function getBreakoutTicket(token, roomId, peerUuid) {
+    if (!breakoutRoomsEnabled || !token || typeof token !== 'string') return null;
+    try {
+        const decoded = jwt.verify(token, jwtKeys.breakout, JWT_VERIFY_OPTIONS);
+        if (decoded?.scope !== 'breakout' || decoded.room !== String(roomId)) return null;
+        if (decoded.uuid !== String(peerUuid || '')) return null;
+        if (!RoomBreakouts.isTicketValid(decoded)) return null;
+        return { main: decoded.main, presenter: decoded.presenter === true, jti: decoded.jti };
+    } catch {
+        return null;
     }
 }
 
@@ -1661,6 +1713,7 @@ io.sockets.on('connect', async (socket) => {
             peer_privacy_status,
             peer_info,
             room_duration,
+            breakout_token,
         } = config;
 
         if (!Validate.isValidRoomName(channel)) {
@@ -1671,6 +1724,13 @@ io.sockets.on('connect', async (socket) => {
         if (channel in socket.channels) {
             return log.debug('[' + socket.id + '] [Warning] already joined', channel);
         }
+
+        // Breakout rooms: proof that the server moved this peer to this room
+        const breakoutTicket = getBreakoutTicket(breakout_token, channel, peer_uuid);
+        // In the rooms of an open breakout session, and for peers moved by a ticket, the presenter role
+        // is never granted to the first peer joining (rooms are briefly empty while peers move),
+        // only by the ticket or the config.
+        const grantsFirstJoinPresenter = !breakoutTicket && !RoomBreakouts.isSessionRoom(channel);
 
         // Security: an OIDC-authenticated peer joins with the name verified by the identity provider
         const verifiedPeerName = getVerifiedIdentityName(identity_token);
@@ -1698,7 +1758,13 @@ io.sockets.on('connect', async (socket) => {
 
         // Security: enforce the OIDC room creation policy that the HTTP routes apply. A valid
         // peer_token is validated below, otherwise opening a new room needs a create-room token.
-        if (OIDC.enabled && isRoomNew && !peer_token && !isCreateRoomTokenValid(create_room_token, channel)) {
+        if (
+            OIDC.enabled &&
+            isRoomNew &&
+            !peer_token &&
+            !breakoutTicket &&
+            !isCreateRoomTokenValid(create_room_token, channel)
+        ) {
             log.warn('[' + socket.id + '] Room creation not authorized', { ip: peer_ip, channel });
             return socket.emit('unauthorized');
         }
@@ -1726,7 +1792,8 @@ io.sockets.on('connect', async (socket) => {
                     }
 
                     // HOST_USERS allowed_rooms: this login can't be used for this room
-                    if (!isRoomAllowedForUser(hostUser, channel)) {
+                    // (a breakout ticket is only issued to peers already in the main room)
+                    if (!breakoutTicket && !isRoomAllowedForUser(hostUser, channel)) {
                         log.warn('[' + socket.id + '] Room not allowed for this user', { username, channel });
                         return socket.emit('roomNotAllowed');
                     }
@@ -1734,7 +1801,7 @@ io.sockets.on('connect', async (socket) => {
                     // Presenter if token 'presenter' is '1'/'true' or first to join room
                     authenticatedUsername = username;
                     authenticatedHostUser = hostUser;
-                    is_presenter = presenter === '1' || presenter === 'true' || isRoomNew;
+                    is_presenter = presenter === '1' || presenter === 'true' || (isRoomNew && grantsFirstJoinPresenter);
 
                     log.debug('[' + socket.id + '] JOIN ROOM - USER AUTH check peer', {
                         ip: peer_ip,
@@ -1748,11 +1815,13 @@ io.sockets.on('connect', async (socket) => {
                     log.error('[' + socket.id + '] [Warning] Join Room JWT error', err.message);
                     return socket.emit('unauthorized');
                 }
-            } else {
+            } else if (!breakoutTicket) {
                 // redirect peer to login page
                 return socket.emit('unauthorized');
             }
         }
+
+        if (breakoutTicket?.presenter) is_presenter = true;
 
         if (RoomTimeLimit.isReached(channel)) {
             log.debug('[' + socket.id + '] [Warning] Room has reached its time limit', channel);
@@ -1761,7 +1830,8 @@ io.sockets.on('connect', async (socket) => {
 
         // Auth passed — safe to create the room structures now
         if (!(channel in channels)) channels[channel] = {};
-        if (!(channel in peers)) peers[channel] = {};
+        // A main room emptied by its breakout rooms gets back its state (lock, password, join lock)
+        if (!(channel in peers)) peers[channel] = { ...(RoomBreakouts.takeMainState(channel) || {}) };
         if (!(channel in presenters)) presenters[channel] = {};
 
         // Security: a host user with a configured displayname joins with it (OIDC verified name wins)
@@ -1775,8 +1845,8 @@ io.sockets.on('connect', async (socket) => {
         const oidcPresenter = isOidcPresenterTokenValid(oidc_presenter_token, channel);
         if (oidcPresenter) is_presenter = true;
 
-        // room locked by the participants can't join
-        if (peers[channel]['lock'] === true) {
+        // room locked by the participants can't join (peers moved by a breakout ticket were already in)
+        if (peers[channel]['lock'] === true && !breakoutTicket) {
             if (RoomPassword.isBlocked(peer_ip, channel)) {
                 log.warn('[' + socket.id + '] [Warning] Room password attempts blocked', { ip: peer_ip, channel });
                 return socket.emit('roomIsLocked');
@@ -1822,12 +1892,13 @@ io.sockets.on('connect', async (socket) => {
         // verified email/sub, never client-selected display names.
         if (
             oidcPresenter ||
+            breakoutTicket?.presenter ||
             (authenticatedUsername && roomPresenters && roomPresenters.includes(authenticatedUsername))
         ) {
             presenters[channel][socket.id] = presenter;
         } else {
             // if not match the presenters username, the first one join room is the presenter
-            if (Object.keys(presenters[channel]).length === 0) {
+            if (grantsFirstJoinPresenter && Object.keys(presenters[channel]).length === 0) {
                 presenters[channel][socket.id] = presenter;
             }
         }
@@ -1836,7 +1907,7 @@ io.sockets.on('connect', async (socket) => {
         const isPresenter = peer_token ? is_presenter : isPeerPresenter(channel, socket.id, peer_name, peer_uuid);
 
         // Room locked by the host for new participants, only presenters can still join
-        if (peers[channel]['joinLock'] === true && !isPresenter) {
+        if (peers[channel]['joinLock'] === true && !isPresenter && !breakoutTicket) {
             log.debug('[' + socket.id + '] [Warning] Room Is Locked for new participants', channel);
             delete presenters[channel][socket.id];
             return socket.emit('roomIsJoinLocked');
@@ -1885,10 +1956,21 @@ io.sockets.on('connect', async (socket) => {
 
         await addPeerTo(channel);
 
+        // Server-bound poll voter identity, never broadcast. peer_uuid is per browser (localStorage), so the
+        // join-time name separates participants sharing a browser while a refresh/reconnect keeps the same vote.
+        socket.pollVoterKey =
+            typeof peer_uuid === 'string' && peer_uuid.length > 0 && peer_uuid.length <= 100
+                ? 'u:' + JSON.stringify([peer_uuid, String(peer_name)])
+                : 's:' + socket.id;
+
         channels[channel][socket.id] = socket;
         socket.channels[channel] = channel;
+        // Breakout tickets are bound to it, and revoked with the socket (kick out)
+        socket.peerUuid = typeof peer_uuid === 'string' ? peer_uuid : '';
+        socket.breakoutTicketIds = new Set(breakoutTicket ? [breakoutTicket.jti] : []);
 
         const peerCounts = getPeerCount(channel);
+        const breakoutSession = RoomBreakouts.getByRoom(channel);
 
         // Send some server info to joined peer
         await sendToPeer(socket.id, sockets, 'serverInfo', {
@@ -1906,7 +1988,9 @@ io.sockets.on('connect', async (socket) => {
                 url: redirectURL,
             },
             maxRoomParticipants: hostCfg.maxRoomParticipants,
-            time_limit: RoomTimeLimit.get(channel),
+            // Breakout rooms run within the main room time limit
+            time_limit:
+                RoomTimeLimit.get(channel) || (breakoutSession ? RoomTimeLimit.get(breakoutSession.mainRoom) : null),
             // Whisper is exposed as a capability flag + segment length only.
             // The API key/basePath are server-side secrets and are never sent.
             whisper: {
@@ -1915,6 +1999,22 @@ io.sockets.on('connect', async (socket) => {
             },
             //...
         });
+
+        // Room polls snapshot (also replaces stale client state after a reconnect)
+        await sendToPeer(socket.id, sockets, 'poll', {
+            action: 'list',
+            polls: RoomPolls.list(channel).map((poll) => RoomPolls.toPublic(poll, socket.pollVoterKey)),
+        });
+
+        // Breakout rooms: state to the joined peer, and live room members to the presenters managing them
+        if (breakoutSession) {
+            RoomBreakouts.clearTimer(breakoutSession, 'idle');
+            if (!isBreakoutManager(channel, socket.id)) {
+                await sendToPeer(socket.id, sockets, 'breakout', buildBreakoutState(channel, false));
+            }
+            settleBreakoutHelp(channel, socket.id);
+        }
+        notifyBreakoutManagers(channel);
 
         // SCENARIO: Notify when the first user join room and is awaiting assistance...
         if (peerCounts === 1) {
@@ -2077,6 +2177,259 @@ io.sockets.on('connect', async (socket) => {
             log.error('Room action', toJson(err));
         }
         log.debug('[' + socket.id + '] Room ' + room_id, { locked: room_is_locked });
+    });
+
+    /**
+     * Handle room polls (server-authoritative state)
+     * @param {Object} cfg
+     * @param {string} cfg.room_id - The ID of the room.
+     * @param {string} cfg.action - 'create' | 'vote' | 'close' | 'delete'.
+     * @param {string} [cfg.poll_id] - Target poll (vote, close, delete).
+     * @param {string} [cfg.question] - Poll question (create).
+     * @param {string[]} [cfg.options] - Poll options (create).
+     * @param {boolean} [cfg.anonymous] - Hide voter names (create).
+     * @param {number} [cfg.option] - Option index, -1 to retract the vote (vote).
+     * @param {string} [cfg.peer_name] - Used with peer_uuid for the presenter check (close, delete).
+     * @param {string} [cfg.peer_uuid] - Used with peer_name for the presenter check (close, delete).
+     */
+    socket.on('poll', async (cfg) => {
+        // Poll texts are plain text (rendered with textContent), normalized by RoomPolls instead of checkXSS
+        if (!Validate.isValidData(cfg) || Array.isArray(cfg)) return;
+
+        const { room_id, action, poll_id } = cfg;
+        // Same sanitization as at join time, so the presenter check compares like with like
+        const peer_name = checkXSS(cfg.peer_name);
+        const peer_uuid = checkXSS(cfg.peer_uuid);
+
+        // Security: only a joined peer of the room may read or change its polls.
+        if (!isPeerInRoom(room_id, socket.id)) {
+            log.debug('poll blocked: sender is not a joined peer', { room_id, socket_id: socket.id });
+            return;
+        }
+
+        // Throttle: every accepted action is broadcast to the whole room
+        const now = Date.now();
+        if (now - (socket.lastPollActionAt || 0) < 100) return;
+        socket.lastPollActionAt = now;
+
+        const voter = {
+            key: socket.pollVoterKey || 's:' + socket.id,
+            name: peers[room_id][socket.id].peer_name,
+        };
+        const replyError = (message) => sendToPeer(socket.id, sockets, 'poll', { action: 'error', message });
+        const canManage = (poll) =>
+            RoomPolls.isCreator(poll, voter.key) || isPeerPresenter(room_id, socket.id, peer_name, peer_uuid);
+
+        try {
+            switch (action) {
+                case 'create': {
+                    const { poll, error } = RoomPolls.create(room_id, cfg, voter);
+                    if (error) return await replyError(error);
+                    log.debug('[' + socket.id + '] Poll created', { room_id, poll_id: poll.id });
+                    await broadcastPoll(room_id, poll, { created_by: socket.id });
+                    break;
+                }
+                case 'vote': {
+                    const { poll, error } = RoomPolls.vote(room_id, poll_id, voter, cfg.option);
+                    if (error) return await replyError(error);
+                    await broadcastPoll(room_id, poll);
+                    break;
+                }
+                case 'close': {
+                    const poll = RoomPolls.get(room_id, poll_id);
+                    if (!poll) return await replyError('Poll not found');
+                    if (!canManage(poll)) return;
+                    RoomPolls.close(room_id, poll_id);
+                    await broadcastPoll(room_id, poll, { closed_by: socket.id });
+                    break;
+                }
+                case 'delete': {
+                    const poll = RoomPolls.get(room_id, poll_id);
+                    if (!poll) return await replyError('Poll not found');
+                    if (!canManage(poll)) return;
+                    RoomPolls.remove(room_id, poll_id);
+                    for (const id in channels[room_id]) {
+                        await channels[room_id][id].emit('poll', { action: 'delete', poll_id, deleted_by: socket.id });
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        } catch (err) {
+            log.error('Poll', toJson(err));
+        }
+    });
+
+    /**
+     * Send a poll update to every peer of the room (sender included), serialized per recipient
+     * so each one only learns its own vote and ownership.
+     * @param {string} room_id
+     * @param {object} poll internal poll
+     * @param {object} [extra] extra fields
+     */
+    async function broadcastPoll(room_id, poll, extra = {}) {
+        for (const id in channels[room_id]) {
+            const peerSocket = channels[room_id][id];
+            await peerSocket.emit('poll', {
+                action: 'update',
+                poll: RoomPolls.toPublic(poll, peerSocket.pollVoterKey),
+                ...extra,
+            });
+        }
+    }
+
+    /**
+     * Handle breakout rooms (server-authoritative state)
+     * @param {Object} cfg
+     * @param {string} cfg.room_id - The room of the sender.
+     * @param {string} cfg.action - 'state' | 'open' | 'move' | 'join' | 'return' | 'broadcast' | 'close'.
+     * @param {string[]} [cfg.rooms] - Breakout room names (open).
+     * @param {number} [cfg.duration] - Minutes, 0 for no limit (open).
+     * @param {boolean} [cfg.allow_return] - Participants may return to the main room by themselves (open).
+     * @param {Object} [cfg.assignments] - { peer_id: room_index } for peers of the main room (open).
+     * @param {string} [cfg.peer_id] - Peer to move (move).
+     * @param {number} [cfg.room_index] - Target room, -1 for the main room (move, join, broadcast: omit for all rooms).
+     * @param {string} [cfg.message] - Plain-text message for one or all the rooms (broadcast).
+     * @param {string} [cfg.peer_name] - Used with peer_uuid for the presenter check.
+     * @param {string} [cfg.peer_uuid] - Used with peer_name for the presenter check.
+     */
+    socket.on('breakout', async (cfg) => {
+        if (!breakoutRoomsEnabled) return;
+
+        // Texts are plain text (rendered with textContent), normalized by RoomBreakouts instead of checkXSS
+        if (!Validate.isValidData(cfg) || Array.isArray(cfg)) return;
+
+        const { room_id, action } = cfg;
+        // Same sanitization as at join time, so the presenter check compares like with like
+        const peer_name = checkXSS(cfg.peer_name);
+        const peer_uuid = checkXSS(cfg.peer_uuid);
+
+        // Security: only a joined peer of the room may read or change its breakout rooms
+        if (!isPeerInRoom(room_id, socket.id)) {
+            log.debug('breakout blocked: sender is not a joined peer', { room_id, socket_id: socket.id });
+            return;
+        }
+
+        const now = Date.now();
+        if (now - (socket.lastBreakoutActionAt || 0) < 100) return;
+        socket.lastBreakoutActionAt = now;
+
+        const isManager = isPeerPresenter(room_id, socket.id, peer_name, peer_uuid);
+        const session = RoomBreakouts.getByRoom(room_id);
+        const replyError = (message) => sendToPeer(socket.id, sockets, 'breakout', { action: 'error', message });
+
+        try {
+            switch (action) {
+                case 'state':
+                    await sendToPeer(socket.id, sockets, 'breakout', buildBreakoutState(room_id, isManager));
+                    break;
+                case 'open': {
+                    if (!isManager) return;
+                    const { session: created, error } = RoomBreakouts.create(room_id, cfg);
+                    if (error) return await replyError(error);
+                    log.info('[' + socket.id + '] Breakout rooms opened', {
+                        room_id,
+                        rooms: created.rooms.length,
+                        duration_ms: created.endsAt ? created.endsAt - created.createdAt : 0,
+                    });
+                    if (created.endsAt) {
+                        RoomBreakouts.setTimer(created, 'end', created.endsAt - Date.now(), () =>
+                            closeBreakoutSession(room_id, 'timeout')
+                        );
+                    }
+                    const assignments =
+                        cfg.assignments && typeof cfg.assignments === 'object' && !Array.isArray(cfg.assignments)
+                            ? Object.entries(cfg.assignments)
+                            : [];
+                    const moved = new Set();
+                    for (const [peerId, index] of assignments) {
+                        const target = RoomBreakouts.getRoomByIndex(created, Number(index));
+                        if (!target || target.index < 0 || !isPeerInRoom(room_id, peerId)) continue;
+                        sendBreakoutMove(channels[room_id][peerId], target, created, room_id, 'host');
+                        moved.add(peerId);
+                    }
+                    // The main room may empty while the peers staying in it reload: let them back in with their role
+                    const main = RoomBreakouts.getRoomByIndex(created, -1);
+                    for (const [peerId, peerSocket] of Object.entries(channels[room_id] || {})) {
+                        if (!moved.has(peerId)) sendBreakoutTicket(peerSocket, main, created, room_id);
+                    }
+                    notifyBreakoutRooms(created, 'opened');
+                    break;
+                }
+                case 'move': {
+                    if (!isManager || !session) return;
+                    const target = RoomBreakouts.getRoomByIndex(session, Number(cfg.room_index));
+                    if (!target) return await replyError('Room not found');
+                    const fromRoom = findBreakoutPeerRoom(session, cfg.peer_id);
+                    if (!fromRoom || fromRoom === target.id) return;
+                    sendBreakoutMove(channels[fromRoom][cfg.peer_id], target, session, fromRoom, 'host');
+                    break;
+                }
+                case 'join': {
+                    if (!isManager || !session) return;
+                    const target = RoomBreakouts.getRoomByIndex(session, Number(cfg.room_index));
+                    if (!target) return await replyError('Room not found');
+                    if (target.id === room_id) return;
+                    sendBreakoutMove(socket, target, session, room_id, 'self');
+                    break;
+                }
+                case 'return': {
+                    if (!session || !RoomBreakouts.isBreakoutRoom(room_id)) return;
+                    if (!session.allowReturn && !isManager) return await replyError('Not allowed');
+                    sendBreakoutMove(socket, RoomBreakouts.getRoomByIndex(session, -1), session, room_id, 'self');
+                    break;
+                }
+                case 'broadcast': {
+                    if (!isManager || !session) return;
+                    const message = RoomBreakouts.cleanMessage(cfg.message);
+                    if (!message) return await replyError('The message is required');
+                    // One room when room_index is given, else every room of the session
+                    const toAll = cfg.room_index === undefined || cfg.room_index === null;
+                    const target = toAll ? null : RoomBreakouts.getRoomByIndex(session, Number(cfg.room_index));
+                    if (!toAll && !target) return await replyError('Room not found');
+                    const from = RoomPolls.cleanName(peers[room_id][socket.id].peer_name);
+                    for (const roomId of target ? [target.id] : RoomBreakouts.roomIds(session)) {
+                        for (const peerSocket of Object.values(channels[roomId] || {})) {
+                            peerSocket.emit('breakout', { action: 'message', message, peer_name: from });
+                        }
+                    }
+                    break;
+                }
+                case 'help': {
+                    if (isManager || !session || !RoomBreakouts.isBreakoutRoom(room_id)) return;
+                    const presenterHere = Object.keys(channels[room_id] || {}).some((peerId) =>
+                        isBreakoutManager(room_id, peerId)
+                    );
+                    if (presenterHere) return await replyError('A presenter is already in this room');
+                    if (countBreakoutManagers(session) === 0) return await replyError('No presenter is available');
+                    const name = RoomPolls.cleanName(peers[room_id][socket.id].peer_name);
+                    const { request, pending, error } = RoomBreakouts.requestHelp(room_id, name);
+                    if (error) return await replyError(error);
+                    if (pending) return;
+                    const room = RoomBreakouts.getRoom(session, room_id);
+                    log.info('[' + socket.id + '] Breakout help requested', { room_id: session.mainRoom });
+                    notifyBreakoutManagers(room_id);
+                    notifyBreakoutRoom(room_id);
+                    sendToBreakoutManagers(session, {
+                        action: 'help',
+                        room_index: room.index,
+                        room_name: room.name,
+                        peer_name: request.peer_name,
+                    });
+                    break;
+                }
+                case 'close':
+                    if (!isManager || !session) return;
+                    log.info('[' + socket.id + '] Breakout rooms closed', { room_id: session.mainRoom });
+                    closeBreakoutSession(session.mainRoom, 'closed');
+                    break;
+                default:
+                    break;
+            }
+        } catch (err) {
+            log.error('Breakout', toJson(err));
+        }
     });
 
     /**
@@ -2318,6 +2671,13 @@ io.sockets.on('connect', async (socket) => {
             if (!isPresenter) return;
         }
 
+        // Ejected peers cannot use their breakout tickets to get past the room lock
+        if (peer_action === 'ejectAll' && send_to_all) {
+            for (const [id, peerSocket] of Object.entries(channels[room_id] || {})) {
+                if (id !== socket.id) revokeBreakoutTickets(peerSocket);
+            }
+        }
+
         const data = {
             peer_id: peer_id,
             peer_name: peer_name,
@@ -2472,6 +2832,9 @@ io.sockets.on('connect', async (socket) => {
         // Only the presenter can kickOut others
         if (isPresenter && isPeerInRoom(room_id, peer_id)) {
             log.debug('[' + socket.id + '] kick out peer [' + peer_id + '] from room_id [' + room_id + ']');
+
+            // A kicked peer cannot use its breakout ticket to get past the room lock
+            revokeBreakoutTickets(sockets[peer_id]);
 
             await sendToPeer(peer_id, sockets, 'kickOut', {
                 peer_name: peer_name,
@@ -3235,6 +3598,9 @@ io.sockets.on('connect', async (socket) => {
             delete peers[channel][socket.id]; // delete peer data from the room
 
             if (getPeerCount(channel) === 0) {
+                // A main room emptied by its breakout rooms keeps its state for the returning peers
+                const keepMainRoomState = !!RoomBreakouts.get(channel);
+                if (keepMainRoomState) RoomBreakouts.saveMainState(channel, getRoomMeta(peers[channel]));
                 delete peers[channel];
                 delete presenters[channel];
                 delete channels[channel]; // Clean up channels to prevent memory leak
@@ -3243,7 +3609,10 @@ io.sockets.on('connect', async (socket) => {
                 delete videoTextAnnotations[channel]; // Clean up persistent screen annotation state
                 delete videoDrawingAnnotations[channel]; // Clean up persistent screen drawing state
                 delete videoDrawingPermissions[channel];
-                RoomTimeLimit.clear(channel);
+                if (!keepMainRoomState) {
+                    RoomTimeLimit.clear(channel);
+                    RoomPolls.clear(channel); // Clean up room polls
+                }
             }
         } catch (err) {
             log.error('Remove Peer', toJson(err));
@@ -3262,6 +3631,10 @@ io.sockets.on('connect', async (socket) => {
             socket.emit('removePeer', { peer_id: id });
             log.debug('[' + socket.id + '] emit removePeer [' + id + ']');
         }
+
+        settleBreakoutHelp(channel);
+        notifyBreakoutManagers(channel);
+        scheduleBreakoutIdleCheck(channel);
 
         if (!OIDC.enabled && hostCfg.protected) {
             hostCfg.authenticated = false;
@@ -3311,11 +3684,11 @@ io.sockets.on('connect', async (socket) => {
 }); // end [sockets.on-connect]
 
 /**
- * Room time limit reached: notify all the peers in the room
+ * Room time limit reached: notify all the peers in the room (and in its breakout rooms)
  * @param {string} room_id
  */
 function endRoomTimeLimit(room_id) {
-    const roomSockets = Object.values(channels[room_id] || {});
+    const roomSockets = getRoomFamily(room_id).flatMap((roomId) => Object.values(channels[roomId] || {}));
     log.info('Room time limit reached', { room_id, peers: roomSockets.length });
     for (const roomSocket of roomSockets) {
         roomSocket.emit('roomTimeLimit', { action: 'end' });
@@ -3323,13 +3696,296 @@ function endRoomTimeLimit(room_id) {
 }
 
 /**
- * Room time limit grace period over: disconnect the peers still in the room
+ * Room time limit grace period over: disconnect the peers still in the room (and in its breakout rooms)
  * @param {string} room_id
  */
 function disconnectRoomPeers(room_id) {
-    for (const roomSocket of Object.values(channels[room_id] || {})) {
-        roomSocket.disconnect(true);
+    for (const roomId of getRoomFamily(room_id)) {
+        for (const roomSocket of Object.values(channels[roomId] || {})) {
+            roomSocket.disconnect(true);
+        }
     }
+}
+
+/**
+ * @param {string} room_id
+ * @returns {string[]} the room plus its breakout rooms when it is the main room of an open session
+ */
+function getRoomFamily(room_id) {
+    const session = RoomBreakouts.get(room_id);
+    return session ? RoomBreakouts.roomIds(session) : [room_id];
+}
+
+/**
+ * Room state kept by the server alongside the peers (lock, password, join lock)
+ * @param {object} room peers[room_id]
+ * @returns {object}
+ */
+function getRoomMeta(room) {
+    const meta = {};
+    for (const key of roomMetaKeys) {
+        if (room && Object.hasOwn(room, key)) meta[key] = room[key];
+    }
+    return meta;
+}
+
+/**
+ * @param {string} room_id
+ * @returns {object[]} joined peers { peer_id, peer_name, presenter }, names as plain text
+ */
+function getBreakoutRoomMembers(room_id) {
+    return Object.entries(peers[room_id] || {})
+        .filter(([peer_id]) => !roomMetaKeys.has(peer_id))
+        .map(([peer_id, peer]) => ({
+            peer_id,
+            peer_name: RoomPolls.cleanName(peer.peer_name),
+            presenter: isBreakoutManager(room_id, peer_id),
+        }));
+}
+
+/**
+ * Presenter of the room: can manage the breakout rooms of its session
+ * @param {string} room_id
+ * @param {string} peer_id
+ * @returns {boolean}
+ */
+function isBreakoutManager(room_id, peer_id) {
+    return presenters[room_id]?.[peer_id]?.is_presenter === true;
+}
+
+/**
+ * Breakout state for one peer. Room ids are never exposed, managers address rooms by index.
+ * @param {string} room_id room of the recipient
+ * @param {boolean} isManager recipient is a presenter of the room
+ * @returns {object}
+ */
+function buildBreakoutState(room_id, isManager) {
+    const session = RoomBreakouts.getByRoom(room_id);
+    const state = { action: 'state', active: !!session, is_manager: isManager === true, now: Date.now() };
+    if (!session) {
+        if (isManager) state.main_members = getBreakoutRoomMembers(room_id);
+        return state;
+    }
+    const room = RoomBreakouts.getRoom(session, room_id);
+    Object.assign(state, {
+        is_main: room.index < 0,
+        room: room.index < 0 ? null : { index: room.index, name: room.name },
+        ends_at: session.endsAt,
+        allow_return: session.allowReturn,
+        help_requested: room.index >= 0 && !!RoomBreakouts.getHelp(room_id),
+    });
+    if (isManager) {
+        state.main_members = getBreakoutRoomMembers(session.mainRoom);
+        state.rooms = session.rooms.map((breakoutRoom) => {
+            const help = RoomBreakouts.getHelp(breakoutRoom.id);
+            return {
+                index: breakoutRoom.index,
+                name: breakoutRoom.name,
+                members: getBreakoutRoomMembers(breakoutRoom.id),
+                help: help ? { peer_name: help.peer_name } : null,
+            };
+        });
+    }
+    return state;
+}
+
+/**
+ * Push the live breakout state to the presenters of the room and of its session rooms
+ * @param {string} room_id
+ */
+function notifyBreakoutManagers(room_id) {
+    if (!breakoutRoomsEnabled) return;
+    const session = RoomBreakouts.getByRoom(room_id);
+    const roomIds = session ? RoomBreakouts.roomIds(session) : [room_id];
+    for (const roomId of roomIds) {
+        for (const [peer_id, peerSocket] of Object.entries(channels[roomId] || {})) {
+            if (isBreakoutManager(roomId, peer_id)) peerSocket.emit('breakout', buildBreakoutState(roomId, true));
+        }
+    }
+}
+
+/**
+ * Push the breakout state to every peer of the session rooms
+ * @param {object} session
+ * @param {string} [reason] 'opened'
+ */
+function notifyBreakoutRooms(session, reason) {
+    for (const roomId of RoomBreakouts.roomIds(session)) {
+        for (const [peer_id, peerSocket] of Object.entries(channels[roomId] || {})) {
+            peerSocket.emit('breakout', { ...buildBreakoutState(roomId, isBreakoutManager(roomId, peer_id)), reason });
+        }
+    }
+}
+
+/**
+ * Push the breakout state to every peer of one room
+ * @param {string} room_id
+ */
+function notifyBreakoutRoom(room_id) {
+    for (const [peer_id, peerSocket] of Object.entries(channels[room_id] || {})) {
+        peerSocket.emit('breakout', buildBreakoutState(room_id, isBreakoutManager(room_id, peer_id)));
+    }
+}
+
+/**
+ * Send a message to the presenters of every room of the session
+ * @param {object} session
+ * @param {object} data
+ */
+function sendToBreakoutManagers(session, data) {
+    for (const roomId of RoomBreakouts.roomIds(session)) {
+        for (const [peer_id, peerSocket] of Object.entries(channels[roomId] || {})) {
+            if (isBreakoutManager(roomId, peer_id)) peerSocket.emit('breakout', data);
+        }
+    }
+}
+
+/**
+ * @param {object} session
+ * @returns {number} presenters joined to any room of the session
+ */
+function countBreakoutManagers(session) {
+    return RoomBreakouts.roomIds(session).reduce(
+        (count, roomId) =>
+            count + Object.keys(channels[roomId] || {}).filter((peer_id) => isBreakoutManager(roomId, peer_id)).length,
+        0
+    );
+}
+
+/**
+ * A presenter came into the room, or the room emptied: its help request is over
+ * @param {string} room_id
+ * @param {string} [peer_id] peer that joined the room
+ */
+function settleBreakoutHelp(room_id, peer_id) {
+    if (!RoomBreakouts.getHelp(room_id)) return;
+    const settled = peer_id ? isBreakoutManager(room_id, peer_id) : getPeerCount(room_id) === 0;
+    if (settled && RoomBreakouts.clearHelp(room_id)) notifyBreakoutRoom(room_id);
+}
+
+/**
+ * @param {object} session
+ * @param {string} peer_id
+ * @returns {string|undefined} session room the peer is joined to
+ */
+function findBreakoutPeerRoom(session, peer_id) {
+    return RoomBreakouts.roomIds(session).find((roomId) => isPeerInRoom(roomId, peer_id));
+}
+
+/**
+ * Order a peer to move to another room of the session: the client reloads on the target
+ * room and joins it with the ticket, keeping its presenter role.
+ * @param {object} peerSocket
+ * @param {object} target { index, id, name }
+ * @param {object} session
+ * @param {string} fromRoom room the peer is leaving
+ * @param {string} reason 'host' | 'self' | 'closed' | 'timeout' | 'idle'
+ */
+function sendBreakoutMove(peerSocket, target, session, fromRoom, reason) {
+    if (!peerSocket || !target) return;
+    const token = issueBreakoutTicket(peerSocket, target, session, fromRoom);
+    peerSocket.emit('breakout', {
+        action: 'move',
+        room_id: target.id,
+        room_name: target.name,
+        is_main: target.index < 0,
+        reason,
+        token,
+    });
+}
+
+/**
+ * Give a peer the ticket for the room it is in, without moving it (rejoin after a reload)
+ * @param {object} peerSocket
+ * @param {object} target { index, id, name }
+ * @param {object} session
+ * @param {string} room room the peer is in
+ */
+function sendBreakoutTicket(peerSocket, target, session, room) {
+    if (!peerSocket || !target) return;
+    const token = issueBreakoutTicket(peerSocket, target, session, room);
+    peerSocket.emit('breakout', { action: 'ticket', room_id: target.id, token });
+}
+
+/**
+ * Issue a ticket to a room of the session, replacing the tickets previously issued to the peer
+ * @param {object} peerSocket
+ * @param {object} target { index, id, name }
+ * @param {object} session
+ * @param {string} fromRoom room the peer is in (its presenter role there is kept)
+ * @returns {string} token
+ */
+function issueBreakoutTicket(peerSocket, target, session, fromRoom) {
+    const { token, jti } = createBreakoutToken({
+        room: target.id,
+        main: session.mainRoom,
+        sid: session.id,
+        uuid: peerSocket.peerUuid,
+        presenter: isBreakoutManager(fromRoom, peerSocket.id),
+    });
+    revokeBreakoutTickets(peerSocket);
+    RoomBreakouts.addTicket(session, jti);
+    peerSocket.breakoutTicketIds = new Set([jti]);
+    return token;
+}
+
+/**
+ * Stop honoring the breakout tickets of a peer
+ * @param {object} peerSocket
+ */
+function revokeBreakoutTickets(peerSocket) {
+    if (!peerSocket?.breakoutTicketIds?.size) return;
+    RoomBreakouts.revokeTickets(peerSocket.breakoutTicketIds);
+    peerSocket.breakoutTicketIds.clear();
+}
+
+/**
+ * Close a breakout session: everyone in a breakout room goes back to the main room
+ * @param {string} mainRoom
+ * @param {string} reason 'closed' | 'timeout' | 'idle'
+ * @returns {boolean} closed
+ */
+function closeBreakoutSession(mainRoom, reason) {
+    const session = RoomBreakouts.get(mainRoom);
+    if (!session) return false;
+    // Issued before ending the session, so the return tickets stay honored for the return window
+    const main = RoomBreakouts.getRoomByIndex(session, -1);
+    for (const room of session.rooms) {
+        for (const peerSocket of Object.values(channels[room.id] || {})) {
+            sendBreakoutMove(peerSocket, main, session, room.id, reason);
+        }
+    }
+    RoomBreakouts.end(mainRoom);
+    for (const [peer_id, peerSocket] of Object.entries(channels[mainRoom] || {})) {
+        peerSocket.emit('breakout', { ...buildBreakoutState(mainRoom, isBreakoutManager(mainRoom, peer_id)), reason });
+    }
+    // Main room still empty after the return window: drop the state it kept for the returning peers
+    if (!(mainRoom in peers)) {
+        setTimeout(() => {
+            if (mainRoom in peers || RoomBreakouts.get(mainRoom)) return;
+            RoomBreakouts.dropOrphanState(mainRoom);
+            RoomTimeLimit.clear(mainRoom);
+            RoomPolls.clear(mainRoom);
+        }, BREAKOUT_RETURN_WINDOW_MS).unref?.();
+    }
+    log.debug('Breakout session closed', { mainRoom, reason });
+    return true;
+}
+
+/**
+ * Close a session whose rooms all stayed empty (peers left instead of moving)
+ * @param {string} room_id
+ */
+function scheduleBreakoutIdleCheck(room_id) {
+    const session = RoomBreakouts.getByRoom(room_id);
+    if (!session) return;
+    const isEmpty = () => RoomBreakouts.roomIds(session).every((roomId) => getPeerCount(roomId) === 0);
+    if (!isEmpty()) return RoomBreakouts.clearTimer(session, 'idle');
+    RoomBreakouts.setTimer(session, 'idle', BREAKOUT_IDLE_MS, () => {
+        if (RoomBreakouts.get(session.mainRoom) === session && isEmpty()) {
+            closeBreakoutSession(session.mainRoom, 'idle');
+        }
+    });
 }
 
 /**
@@ -3606,6 +4262,7 @@ function isAllowedRoomAccess(logMessage, req, hostCfg, peers, roomId) {
         (hostUserAuthenticated && roomExist) || // User authenticated via Login and room Exist
         ((OIDCUserAuthenticated || hostUserAuthenticated) && roomCount === 0) || // User authenticated joins the first room
         (OIDCUserAuthenticated && OIDCAllowRoomCreationForAuthUsers) || // Allow room creation if authenticated via OIDC
+        RoomBreakouts.isSessionRoom(roomId) || // Main or breakout room of an open session (join checks the ticket)
         roomExist; // User Or Guest join an existing Room
 
     log.debug(logMessage, {

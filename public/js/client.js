@@ -14,7 +14,7 @@
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.2.10
+ * @version 2.2.32
  *
  */
 
@@ -26,6 +26,7 @@
 const myRoomId = getId('myRoomId');
 const copyRoomUrlBtn = getId('copyRoomUrlBtn');
 const roomSessionDuration = getRoomDuration();
+const BREAKOUT_TICKET_KEY = 'mirotalk_breakout_ticket';
 const roomId = getRoomId();
 const myRoomUrl = window.location.origin + '/join/' + roomId; // share room url
 
@@ -210,6 +211,8 @@ const captionBtn = getId('captionBtn');
 const roomEmojiPickerBtn = getId('roomEmojiPickerBtn');
 const whiteboardBtn = getId('whiteboardBtn');
 const editorBtn = getId('editorBtn');
+const pollBtn = getId('pollBtn');
+const breakoutBtn = getId('breakoutBtn');
 const snapshotRoomBtn = getId('snapshotRoomBtn');
 const fileShareBtn = getId('fileShareBtn');
 const documentPiPBtn = getId('documentPiPBtn');
@@ -543,6 +546,19 @@ const editorCopyBtn = getId('editorCopyBtn');
 const editorSaveBtn = getId('editorSaveBtn');
 const editorClearBtn = getId('editorClearBtn');
 const editorCloseBtn = getId('editorCloseBtn');
+
+// Polls
+const pollRoom = getId('pollRoom');
+const pollHeader = getId('pollHeader');
+const pollCount = getId('pollCount');
+const pollNewBtn = getId('pollNewBtn');
+const pollCloseBtn = getId('pollCloseBtn');
+const pollEmptyNewBtn = getId('pollEmptyNewBtn');
+
+// Breakout rooms
+const breakoutRoom = getId('breakoutRoom');
+const breakoutHeader = getId('breakoutHeader');
+const breakoutCloseBtn = getId('breakoutCloseBtn');
 
 // Room actions buttons
 const captionEveryoneBtn = getId('captionEveryoneBtn');
@@ -891,6 +907,12 @@ let wbIsBgTransparent = false;
 // shared editor (synced over RTC data channels)
 let roomEditor = null;
 let editorIsOpen = false;
+
+// room polls (state kept by the signaling server)
+let roomPolls = null;
+let pollIsOpen = false;
+let roomBreakouts = null;
+let breakoutIsOpen = false;
 let wbIsApplyingRemote = false;
 let wbShowParticipantNames = false;
 let wbObjectIdCounter = 0;
@@ -1062,6 +1084,9 @@ function setButtonsToolTip() {
     setTippy(editorSaveBtn, 'Save as HTML', 'bottom');
     setTippy(editorClearBtn, 'Clear the editor', 'bottom');
     setTippy(editorCloseBtn, 'Close', 'bottom');
+    // Poll buttons
+    setTippy(pollNewBtn, 'New poll', 'bottom');
+    setTippy(pollCloseBtn, 'Close', 'bottom');
     setTippy(wbDrawingColorEl, 'Drawing color', 'bottom');
     setTippy(whiteboardGhostButton, 'Toggle transparent background', 'bottom');
     setTippy(whiteboardGridBtn, 'Toggle whiteboard grid', 'bottom');
@@ -1278,6 +1303,9 @@ function getRoomId() {
         const newUrl = url.toString();
         window.history.pushState({ url: newUrl }, roomId, newUrl);
     }
+    // Moved by a breakout ticket: use the exact room id it was issued for (the URL may encode it differently)
+    roomId = getBreakoutTicketRoom(roomId);
+
     console.log('Direct join', { room: roomId });
 
     // Update Room name in settings
@@ -1791,6 +1819,8 @@ async function initClientPeer() {
     signalingSocket.on('roomTimeLimitReached', handleRoomTimeLimitReached);
     signalingSocket.on('roomTimeLimit', handleRoomTimeLimit);
     signalingSocket.on('roomAction', handleRoomAction);
+    signalingSocket.on('poll', handlePoll);
+    signalingSocket.on('breakout', handleBreakout);
     signalingSocket.on('addPeer', handleAddPeer);
     signalingSocket.on('serverInfo', handleServerInfo);
     signalingSocket.on('sessionDescription', handleSessionDescription);
@@ -1939,6 +1969,7 @@ function handleServerInfo(config) {
     setPresenterBadge(myVideoPeerName, isPresenter);
     setPresenterBadge(getId('myScreenPeerName'), isPresenter);
     updateEditorLockUI();
+    roomPolls?.render(); // presenter can manage every poll
 
     // Peer identified if presenter or not then....
     handleShortcuts();
@@ -2098,6 +2129,8 @@ function handleButtonsRule() {
         { element: myHandBtn, display: buttons.main.showMyHandBtn },
         { element: whiteboardBtn, display: buttons.main.showWhiteboardBtn },
         { element: editorBtn, display: buttons.main.showEditorBtn && RoomEditor.isSupported() },
+        { element: pollBtn, display: buttons.main.showPollBtn },
+        { element: breakoutBtn, display: isBreakoutBtnVisible() },
         { element: snapshotRoomBtn, display: buttons.main.showSnapshotRoomBtn && !isMobileDevice },
         { element: fileShareBtn, display: buttons.main.showFileShareBtn },
         { element: documentPiPBtn, display: showDocumentPipBtn && buttons.main.showDocumentPipBtn },
@@ -3799,6 +3832,8 @@ async function joinToChannel() {
         userAgent: userAgent,
         // Room-wide time limit request, applied by the server only for presenters
         ...(roomSessionDuration !== 'unlimited' && { room_duration: roomSessionDuration }),
+        // Proof that the server moved me to this (breakout or main) room
+        breakout_token: getBreakoutTicket(),
     });
     handleBodyOnMouseMove(); // show/hide bottomButtons ...
     makeRoomPopupQR();
@@ -8225,6 +8260,8 @@ function manageButtons() {
     setChatEmojiBtn();
     setMyWhiteboardBtn();
     setEditorBtn();
+    setPollBtn();
+    setBreakoutBtn();
     setSnapshotRoomBtn();
     setMyFileShareBtn();
     setDocumentPiPBtn();
@@ -9572,6 +9609,393 @@ function confirmClearEditor() {
             playSound('delete');
         }
     });
+}
+
+/**
+ * Room polls: the signaling server keeps the poll state and counts the votes
+ * (one per participant), this client only sends intents and renders the results.
+ */
+function setPollBtn() {
+    roomPolls = new RoomPolls({
+        elements: {
+            list: getId('pollList'),
+            empty: getId('pollEmpty'),
+            form: getId('pollForm'),
+            question: getId('pollQuestion'),
+            options: getId('pollOptions'),
+            addOptionBtn: getId('pollAddOptionBtn'),
+            anonymous: getId('pollAnonymous'),
+            cancelBtn: getId('pollCancelBtn'),
+            count: pollCount,
+        },
+        send: (action, data) =>
+            sendToServer('poll', {
+                room_id: roomId,
+                peer_name: myPeerName,
+                peer_uuid: myPeerUUID,
+                action,
+                ...data,
+            }),
+        getMyPeerId: () => myPeerId,
+        isPresenter: () => isPresenter,
+        onPollCreated: handlePollCreated,
+        onError: (message) => userLog('warning', message),
+        confirmDelete: confirmDeletePoll,
+    });
+
+    dragElement(pollRoom, pollHeader);
+
+    pollBtn.addEventListener('click', togglePoll);
+    pollCloseBtn.addEventListener('click', togglePoll);
+    pollNewBtn.addEventListener('click', () => roomPolls.showForm());
+    pollEmptyNewBtn.addEventListener('click', () => roomPolls.showForm());
+}
+
+/**
+ * Poll message from the signaling server
+ * @param {object} data
+ */
+function handlePoll(data) {
+    roomPolls?.handle(data);
+}
+
+/**
+ * A new poll was created: bring it to everyone's attention
+ * @param {object} poll public poll
+ * @param {boolean} isMine created by me
+ */
+function handlePollCreated(poll, isMine) {
+    if (isMine) return;
+    playSound('newMessage');
+    userLog(
+        'info',
+        (window.i18n?.t('{name} started a poll', 'toasts') || '{name} started a poll').replace(
+            '{name}',
+            poll.creator_name
+        ),
+        'top-end',
+        4000
+    );
+    if (!pollIsOpen) togglePoll();
+}
+
+/**
+ * Show - Hide polls
+ */
+function togglePoll() {
+    pollIsOpen = !pollIsOpen;
+    if (pollIsOpen) {
+        if (isMobileDevice && settingsExtraMenu) {
+            settingsExtraMenu.classList.remove('show');
+            settingsExtraMenu.classList.add('hidden');
+        }
+        pollRoom.style.top = '50%';
+        pollRoom.style.left = '50%';
+    }
+    pollRoom.classList.toggle('hidden', !pollIsOpen);
+    screenReaderAccessibility.announceMessage(pollIsOpen ? 'Polls opened' : 'Polls closed');
+}
+
+/**
+ * Confirm the deletion of a poll for everyone
+ * @returns {Promise<boolean>} confirmed
+ */
+function confirmDeletePoll() {
+    playSound('newMessage');
+    return Swal.fire({
+        background: swBg,
+        imageUrl: images.delete,
+        position: 'center',
+        title: 'Delete poll',
+        text: 'Are you sure you want to delete this poll for everyone?',
+        showCancelButton: true,
+        focusCancel: true,
+        customClass: { confirmButton: 'mirotalk-swal-destructive' },
+        confirmButtonText: 'Delete poll',
+        cancelButtonText: 'Cancel',
+        showClass: { popup: 'animate__animated animate__fadeInDown' },
+        hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+    }).then((result) => {
+        if (result.isConfirmed) playSound('delete');
+        return result.isConfirmed;
+    });
+}
+
+/**
+ * Breakout rooms: the signaling server keeps the state and moves the peers, this client
+ * reloads on the target room with the server-issued ticket.
+ */
+function setBreakoutBtn() {
+    roomBreakouts = new RoomBreakouts({
+        elements: {
+            setup: getId('breakoutSetup'),
+            roomCount: getId('breakoutRoomCount'),
+            duration: getId('breakoutDuration'),
+            allowReturn: getId('breakoutAllowReturn'),
+            shuffleBtn: getId('breakoutShuffleBtn'),
+            names: getId('breakoutNames'),
+            peers: getId('breakoutPeers'),
+            active: getId('breakoutActive'),
+            activeRooms: getId('breakoutActiveRooms'),
+            broadcastBtn: getId('breakoutBroadcastBtn'),
+            endBtn: getId('breakoutEndBtn'),
+            timer: getId('breakoutTimer'),
+            banner: getId('breakoutBanner'),
+            bannerName: getId('breakoutBannerName'),
+            bannerTimer: getId('breakoutBannerTimer'),
+            returnBtn: getId('breakoutReturnBtn'),
+            helpBtn: getId('breakoutHelpBtn'),
+        },
+        send: (action, data) =>
+            sendToServer('breakout', {
+                room_id: roomId,
+                peer_name: myPeerName,
+                peer_uuid: myPeerUUID,
+                action,
+                ...data,
+            }),
+        getMyPeerId: () => myPeerId,
+        onMove: handleBreakoutMove,
+        onTicket: ({ room_id, token }) => saveBreakoutTicket(room_id, token),
+        onMessage: handleBreakoutMessage,
+        onHelp: handleBreakoutHelp,
+        onNotice: (text) => userLog('info', text, 'top-end', 5000),
+        onError: (message) => userLog('warning', message),
+        onManagerChange: updateBreakoutBtn,
+        confirmClose: confirmCloseBreakouts,
+        promptBroadcast: promptBreakoutMessage,
+    });
+
+    dragElement(breakoutRoom, breakoutHeader);
+
+    breakoutBtn.addEventListener('click', toggleBreakout);
+    breakoutCloseBtn.addEventListener('click', toggleBreakout);
+}
+
+/**
+ * Only the presenters managing the room (as known by the server) see the breakout rooms button.
+ * The server sends no breakout state when the feature is disabled (BREAKOUT_ROOMS_ENABLED).
+ * @returns {boolean}
+ */
+function isBreakoutBtnVisible() {
+    return !!buttons.main.showBreakoutBtn && !!roomBreakouts?.isManager();
+}
+
+function updateBreakoutBtn() {
+    elemDisplay(breakoutBtn, isBreakoutBtnVisible());
+    if (!isBreakoutBtnVisible() && breakoutIsOpen) toggleBreakout();
+    updateSettingsExtraGroups();
+}
+
+/**
+ * Breakout message from the signaling server
+ * @param {object} data
+ */
+function handleBreakout(data) {
+    roomBreakouts?.handle(data);
+}
+
+/**
+ * Show - Hide breakout rooms
+ */
+function toggleBreakout() {
+    breakoutIsOpen = !breakoutIsOpen;
+    if (breakoutIsOpen) {
+        if (isMobileDevice && settingsExtraMenu) {
+            settingsExtraMenu.classList.remove('show');
+            settingsExtraMenu.classList.add('hidden');
+        }
+        breakoutRoom.style.top = '50%';
+        breakoutRoom.style.left = '50%';
+        roomBreakouts.send('state');
+    }
+    breakoutRoom.classList.toggle('hidden', !breakoutIsOpen);
+    screenReaderAccessibility.announceMessage(breakoutIsOpen ? 'Breakout rooms opened' : 'Breakout rooms closed');
+}
+
+/**
+ * Keep the ticket for the target room across the page reload (this tab only)
+ * @param {string} room
+ * @param {string} token
+ */
+function saveBreakoutTicket(room, token) {
+    try {
+        window.sessionStorage.setItem(BREAKOUT_TICKET_KEY, JSON.stringify({ room, token }));
+    } catch (err) {
+        console.warn('Breakout ticket not saved', err);
+    }
+}
+
+/**
+ * @returns {object|null} { room, token } stored ticket
+ */
+function readBreakoutTicket() {
+    try {
+        const ticket = JSON.parse(window.sessionStorage.getItem(BREAKOUT_TICKET_KEY) || 'null');
+        return typeof ticket?.room === 'string' && typeof ticket.token === 'string' ? ticket : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * @returns {string|null} ticket for the current room
+ */
+function getBreakoutTicket() {
+    const ticket = readBreakoutTicket();
+    return ticket?.room === roomId ? ticket.token : null;
+}
+
+/**
+ * @param {string} urlRoomId room id read from the URL
+ * @returns {string} the stored ticket room id when the URL is an encoded form of it, else urlRoomId
+ */
+function getBreakoutTicketRoom(urlRoomId) {
+    const ticket = readBreakoutTicket();
+    if (!ticket || ticket.room === urlRoomId) return urlRoomId;
+    try {
+        return decodeURIComponent(urlRoomId) === ticket.room ? ticket.room : urlRoomId;
+    } catch {
+        return urlRoomId;
+    }
+}
+
+/**
+ * Same join URL on another room, keeping my name and media state and skipping the join prompts
+ * @param {string} targetRoom
+ * @returns {string}
+ */
+function getBreakoutRoomURL(targetRoom) {
+    const url = new URL(window.location.href);
+    // Room ids read from the path are already percent-encoded: the setter only encodes what a path cannot contain
+    url.pathname = '/join/' + targetRoom;
+    url.hash = '';
+    ['room', 'duration', 'name', 'audio', 'video', 'notify'].forEach((param) => url.searchParams.delete(param));
+    url.searchParams.set('name', myPeerName);
+    url.searchParams.set('audio', myAudioStatus ? '1' : '0');
+    url.searchParams.set('video', myVideoStatus ? '1' : '0');
+    url.searchParams.set('notify', '0');
+    return url.toString();
+}
+
+/**
+ * The server moves me to another room
+ * @param {object} data { room_id, room_name, is_main, reason, token }
+ */
+async function handleBreakoutMove(data) {
+    const { room_id, room_name, is_main, reason, token } = data;
+    if (isLeavingRoom || room_id === roomId) return;
+    saveBreakoutTicket(room_id, token);
+    const url = getBreakoutRoomURL(room_id);
+
+    if (reason !== 'self') {
+        playSound('newMessage');
+        let text = translateDialogText('The breakout rooms have been closed.');
+        if (!is_main) {
+            text = translateDialogText('You are moving to {room}').replace('{room}', room_name);
+        } else if (reason === 'host') {
+            text = translateDialogText('The host is moving you to the main room.');
+        } else if (reason === 'timeout') {
+            text = translateDialogText('The breakout time is over.');
+        }
+        await Swal.fire({
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            background: swBg,
+            position: 'center',
+            title: is_main ? 'Back to the main room' : 'Breakout room',
+            text,
+            timer: 5000,
+            timerProgressBar: true,
+            confirmButtonText: 'Go now',
+            showClass: { popup: 'animate__animated animate__fadeInDown' },
+            hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+        });
+    }
+    exitRoom(url);
+}
+
+/**
+ * Message sent by the presenter to one or every room
+ * @param {object} data { message, peer_name }
+ */
+function handleBreakoutMessage(data) {
+    playSound('notify');
+    Swal.fire({
+        background: swBg,
+        position: 'top',
+        imageUrl: images.message,
+        title: translateDialogText('Message from {name}').replace('{name}', data.peer_name || 'Presenter'),
+        text: data.message,
+        confirmButtonText: 'OK',
+        showClass: { popup: 'animate__animated animate__fadeInDown' },
+        hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+    });
+}
+
+/**
+ * Presenters: a breakout room asks for help, offer to join it
+ * @param {object} data { room_index, room_name, peer_name }
+ */
+function handleBreakoutHelp(data) {
+    playSound('notify');
+    Swal.fire({
+        background: swBg,
+        position: 'top',
+        imageUrl: images.message,
+        title: 'Help requested',
+        text: translateDialogText('{name} asks for help in {room}')
+            .replace('{name}', data.peer_name || 'A participant')
+            .replace('{room}', data.room_name || ''),
+        showCancelButton: true,
+        confirmButtonText: 'Join room',
+        cancelButtonText: 'Later',
+        showClass: { popup: 'animate__animated animate__fadeInDown' },
+        hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+    }).then((result) => {
+        if (result.isConfirmed) roomBreakouts?.join(data.room_index);
+    });
+}
+
+/**
+ * @param {string} [roomName] room to message, every room when unset
+ * @returns {Promise<string|null>} message to send
+ */
+function promptBreakoutMessage(roomName) {
+    return Swal.fire({
+        background: swBg,
+        position: 'center',
+        imageUrl: images.message,
+        title: roomName ? translateDialogText('Message {room}').replace('{room}', roomName) : 'Message all rooms',
+        input: 'textarea',
+        inputPlaceholder: roomName ? 'Type a message for this room' : 'Type a message for everyone',
+        inputAttributes: { maxlength: 300 },
+        showCancelButton: true,
+        confirmButtonText: 'Send',
+        cancelButtonText: 'Cancel',
+        showClass: { popup: 'animate__animated animate__fadeInDown' },
+        hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+    }).then((result) => (result.isConfirmed ? result.value : null));
+}
+
+/**
+ * @returns {Promise<boolean>} confirmed
+ */
+function confirmCloseBreakouts() {
+    playSound('newMessage');
+    return Swal.fire({
+        background: swBg,
+        position: 'center',
+        title: 'Close breakout rooms',
+        text: 'Everyone will return to the main room.',
+        showCancelButton: true,
+        focusCancel: true,
+        customClass: { confirmButton: 'mirotalk-swal-destructive' },
+        confirmButtonText: 'Close rooms',
+        cancelButtonText: 'Cancel',
+        showClass: { popup: 'animate__animated animate__fadeInDown' },
+        hideClass: { popup: 'animate__animated animate__fadeOutUp' },
+    }).then((result) => result.isConfirmed);
 }
 
 /**
@@ -19940,7 +20364,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.2.10',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.2.32',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
