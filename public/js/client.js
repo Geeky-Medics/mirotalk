@@ -14,7 +14,7 @@
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.2.40
+ * @version 2.2.42
  *
  */
 
@@ -28,7 +28,7 @@ const copyRoomUrlBtn = getId('copyRoomUrlBtn');
 const roomSessionDuration = getRoomDuration();
 const BREAKOUT_TICKET_KEY = 'mirotalk_breakout_ticket';
 const roomId = getRoomId();
-const myRoomUrl = window.location.origin + '/join/' + roomId; // share room url
+const myRoomUrl = window.location.origin + getJoinRoomPath(roomId); // share room url
 
 // Images
 const images = {
@@ -1300,7 +1300,7 @@ function getRoomId() {
     let queryRoomId = getQueryParam('room');
 
     // skip /join/
-    let roomId = queryRoomId ? queryRoomId : window.location.pathname.split('/join/')[1];
+    let roomId = queryRoomId ? queryRoomId : decodeRoomPath(window.location.pathname.split('/join/')[1]);
 
     // if not specified room id or 'random', create one random
     if (roomId == '' || roomId === 'random') {
@@ -1328,6 +1328,20 @@ function getRoomId() {
     // Save room name in local storage
     window.localStorage.lastRoom = roomId;
     return roomId;
+}
+
+/**
+ * Decode a /join/<room> path segment back to the original room name (abc%25 -> abc%)
+ * @param {string} roomPath
+ * @returns {string} room name
+ */
+function decodeRoomPath(roomPath) {
+    if (!roomPath) return roomPath;
+    try {
+        return filterXSS(decodeURIComponent(roomPath));
+    } catch {
+        return roomPath; // malformed percent-encoding: keep the raw value
+    }
 }
 
 /**
@@ -2024,7 +2038,7 @@ function handleUnauthorized() {
         hideClass: { popup: 'animate__animated animate__fadeOutUp' },
     }).then(() => {
         // Login required to join room
-        openURL(`/login/?room=${roomId}`);
+        openURL(`/login/?room=${encodeURIComponent(roomId)}`);
     });
 }
 
@@ -10004,8 +10018,7 @@ function getBreakoutTicketRoom(urlRoomId) {
  */
 function getBreakoutRoomURL(targetRoom) {
     const url = new URL(window.location.href);
-    // Room ids read from the path are already percent-encoded: the setter only encodes what a path cannot contain
-    url.pathname = '/join/' + targetRoom;
+    url.pathname = getJoinRoomPath(targetRoom);
     url.hash = '';
     ['room', 'duration', 'name', 'audio', 'video', 'notify'].forEach((param) => url.searchParams.delete(param));
     url.searchParams.set('name', myPeerName);
@@ -20719,7 +20732,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.2.40',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.2.42',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
