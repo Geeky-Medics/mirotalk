@@ -48,6 +48,7 @@ const images = {
     about: '../images/mirotalk-logo.gif',
     feedback: '../images/feedback.png',
     forbidden: '../images/forbidden.png',
+    banned: '../images/banned.svg',
     avatar: '../images/mirotalk-logo.png',
     recording: '../images/recording.png',
     poster: '../images/loader.gif',
@@ -18082,7 +18083,9 @@ function handleRoomBanned() {
         allowEscapeKey: false,
         background: swBg,
         position: 'center',
-        imageUrl: images.leave,
+        imageUrl: images.banned,
+        imageWidth: 128,
+        imageHeight: 128,
         title: 'Oops, You are banned',
         text: 'A presenter banned you from this room, you are not allowed to join it again.',
         confirmButtonText: `Ok`,
@@ -20831,7 +20834,8 @@ function kickOut(peer_id, ban = false) {
     Swal.fire({
         background: swBg,
         position: 'center',
-        imageUrl: images.leave,
+        imageUrl: ban ? images.banned : images.leave,
+        ...(ban && { imageWidth: 128, imageHeight: 128 }),
         title: ban ? 'Ban participant' : 'Eject participant',
         text: ban
             ? `Are you sure you want to ban ${pName}? They will not be able to join this room again.`
@@ -20948,7 +20952,8 @@ function handleKickedOut(config) {
         allowOutsideClick: false,
         background: swBg,
         position: 'center',
-        imageUrl: images.leave,
+        imageUrl: banned ? images.banned : images.leave,
+        ...(banned && { imageWidth: 128, imageHeight: 128 }),
         title: banned ? 'Banned!' : 'Kicked out!',
         html: renderRoomTemplate('tpl-kicked-out-modal', {
             text: {
@@ -22037,6 +22042,11 @@ function setupQuickDeviceSwitchDropdowns() {
         menuEl.appendChild(row);
     }
 
+    // The menus stay open after picking a device; actions that open another panel close them explicitly
+    function hideDeviceMenu(toggleEl, menuEl) {
+        closeMenu(toggleEl, menuEl);
+    }
+
     function appendSelectOptions(menuEl, selectEl, emptyLabel, rebuildFn, meterCollector) {
         if (!menuEl || !selectEl) {
             const btn = document.createElement('button');
@@ -22144,6 +22154,7 @@ function setupQuickDeviceSwitchDropdowns() {
         settingsBtn.appendChild(settingsIcon);
         settingsBtn.appendChild(document.createTextNode(' Open Video Settings'));
         settingsBtn.addEventListener('click', () => {
+            hideDeviceMenu(videoToggle, videoMenu);
             hideShowMySettings();
             // Simulate tab click to open video devices tab
             setTimeout(() => {
@@ -22248,6 +22259,7 @@ function setupQuickDeviceSwitchDropdowns() {
             document.createTextNode(` ${window.i18n?.t('Open Audio Settings', 'labels') || 'Open Audio Settings'}`)
         );
         settingsBtn.addEventListener('click', () => {
+            hideDeviceMenu(audioToggle, audioMenu);
             hideShowMySettings();
             // Simulate tab click to open audio devices tab
             setTimeout(() => {
@@ -22302,9 +22314,10 @@ function setupQuickDeviceSwitchDropdowns() {
 
     // Close on outside click
     document.addEventListener('click', (e) => {
-        const t = e.target;
-        const inVideo = videoDropdown && (videoDropdown === t || videoDropdown.contains(t));
-        const inAudio = audioDropdown && (audioDropdown === t || audioDropdown.contains(t));
+        // Menu items are rebuilt on click, so the target may already be detached; use the original event path
+        const path = e.composedPath();
+        const inVideo = !!videoDropdown && path.includes(videoDropdown);
+        const inAudio = !!audioDropdown && path.includes(audioDropdown);
         if (!inVideo) closeMenu(videoToggle, videoMenu);
         if (!inAudio) closeMenu(audioToggle, audioMenu);
     });
@@ -22315,10 +22328,6 @@ function setupQuickDeviceSwitchDropdowns() {
         closeMenu(videoToggle, videoMenu);
         closeMenu(audioToggle, audioMenu);
     });
-
-    // Close after selecting an item
-    if (videoMenu) videoMenu.addEventListener('click', () => closeMenu(videoToggle, videoMenu));
-    if (audioMenu) audioMenu.addEventListener('click', () => closeMenu(audioToggle, audioMenu));
 
     // Keep UI synced when settings panel changes device
     if (videoSelect) videoSelect.addEventListener('change', rebuildVideoMenu);
