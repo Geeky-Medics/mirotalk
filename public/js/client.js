@@ -14,7 +14,7 @@
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.2.62
+ * @version 2.2.63
  *
  */
 
@@ -3955,7 +3955,8 @@ async function handleAddPeer(config) {
     // As P2P check who I am connected with
     let connectedPeersName = [];
     for (const id in peerConnections) {
-        connectedPeersName.push(peers[id]['peer_name']);
+        // A connection left behind for a peer no longer in the room must not abort the join
+        if (peers[id]) connectedPeersName.push(peers[id]['peer_name']);
     }
     console.log('[RTCPeerConnection] - CONNECTED TO PEERS', JSON.stringify(connectedPeersName));
     // userLog('info', 'Connected to: ' + JSON.stringify(connectedPeersName));
@@ -4582,7 +4583,7 @@ function handleRemovePeer(config) {
                 }
             }
         }
-        peerVideoMediaElements[peerVideoId].parentNode.removeChild(peerVideoMediaElements[peerVideoId]);
+        peerVideoMediaElements[peerVideoId].remove();
         adaptAspectRatio();
     }
 
@@ -4602,12 +4603,13 @@ function handleRemovePeer(config) {
                 }
             }
         }
-        peerScreenMediaElements[peerScreenId].parentNode.removeChild(peerScreenMediaElements[peerScreenId]);
+        // handleScreenStop may have already taken this tile off the page: remove() is a no-op then
+        peerScreenMediaElements[peerScreenId].remove();
         adaptAspectRatio();
     }
 
     if (peerAudioId in peerAudioMediaElements) {
-        peerAudioMediaElements[peerAudioId].parentNode.removeChild(peerAudioMediaElements[peerAudioId]);
+        peerAudioMediaElements[peerAudioId].remove();
         updateAudioUnlockPrompt();
     }
 
@@ -21141,7 +21143,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.2.62',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.2.63',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
