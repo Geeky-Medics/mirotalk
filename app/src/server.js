@@ -43,7 +43,7 @@ dependencies: {
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.3.11
+ * @version 2.3.15
  *
  */
 
@@ -1660,7 +1660,8 @@ io.sockets.on('connect', async (socket) => {
         if (!Validate.isValidData(data)) return;
 
         //...
-        const { room_id, peer_id, peer_name, method, params } = data;
+        const { room_id, peer_id, method, params } = data;
+        const peer_name = Validate.sanitizePeerName(data.peer_name);
 
         switch (method) {
             case 'checkPeerName':
@@ -1791,7 +1792,7 @@ io.sockets.on('connect', async (socket) => {
             channel_password,
             peer_uuid,
             peer_name: requested_peer_name,
-            peer_avatar,
+            peer_avatar: requested_peer_avatar,
             peer_token,
             create_room_token,
             identity_token,
@@ -1808,6 +1809,9 @@ io.sockets.on('connect', async (socket) => {
             room_duration,
             breakout_token,
         } = config;
+
+        // Security: the avatar is rendered by every room member, keep only normalized http(s) URLs
+        const peer_avatar = Validate.sanitizeAvatarURL(requested_peer_avatar);
 
         if (!Validate.isValidRoomName(channel)) {
             log.warn('[' + socket.id + '] - Invalid room name', channel);
@@ -1949,6 +1953,10 @@ io.sockets.on('connect', async (socket) => {
             socket.verifiedPeerName = peer_name;
             config.peer_name = peer_name;
         }
+
+        // Security: the name is shown to every peer, sometimes as HTML (toasts, dialogs): plain text only
+        peer_name = Validate.sanitizePeerName(peer_name);
+        config.peer_name = peer_name;
 
         // Proof of an OIDC session listed in PRESENTERS (verified email or sub), bound to this room
         const oidcPresenter = isOidcPresenterTokenValid(oidc_presenter_token, channel);
@@ -2298,7 +2306,9 @@ io.sockets.on('connect', async (socket) => {
         }
 
         //log.debug('[' + socket.id + '] Room action:', config);
-        const { room_id, peer_name, peer_uuid, password, action } = config;
+        const { room_id, peer_uuid, password, action } = config;
+        // Plain text name (same normalization as at join): once the presenter check passes it equals the stored one
+        const peer_name = Validate.sanitizePeerName(config.peer_name);
 
         if (!peers[room_id]) {
             log.warn('Room action room not found', { peer_id: socket.id, room_id });
@@ -2661,7 +2671,11 @@ io.sockets.on('connect', async (socket) => {
         if (!Validate.isValidData(config)) return;
 
         // log.debug('Peer name', config);
-        const { room_id, peer_name_old, peer_name_new, peer_avatar } = config;
+        const { room_id, peer_name_old } = config;
+        // Security: plain text name, same normalization as at join time
+        const peer_name_new = Validate.sanitizePeerName(config.peer_name_new);
+        // Security: normalize so the value stored and relayed to other peers is the sanitized one
+        const peer_avatar = Validate.sanitizeAvatarURL(config.peer_avatar);
 
         if (socket.verifiedPeerName) {
             return log.debug('[' + socket.id + '] peerName change blocked: name is verified (OIDC or HOST_USERS)');
@@ -4504,7 +4518,7 @@ function isPeerPresenter(room_id, peer_id, peer_name, peer_uuid) {
         const isPresenter =
             typeof stored === 'object' &&
             stored.is_presenter === true &&
-            stored.peer_name === peer_name &&
+            stored.peer_name === Validate.sanitizePeerName(peer_name) &&
             stored.peer_uuid === peer_uuid;
 
         log.debug('[' + peer_id + '] isPeerPresenter', { stored, isPresenter });
