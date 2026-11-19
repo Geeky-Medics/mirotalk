@@ -256,6 +256,35 @@ describe('camera background worker script', () => {
         assert.equal(image.close.calledOnce, true);
     });
 
+    it('composites video backgrounds with the latest frame sent by the page', async () => {
+        createWorker();
+        const first = bitmap(1280, 720);
+        await startFrames({ mode: 'image', animated: true, bitmap: first });
+        const next = bitmap(1280, 720);
+        await send({ type: 'background-frame', session: 7, bitmap: next });
+        assert.equal(state().background.bitmap, next);
+        assert.equal(first.close.calledOnce, true);
+
+        await send({ type: 'frame', id: 3, session: 7, bitmap: bitmap(), timestamp: 10 });
+        const drawn = state()
+            .ctx.drawImage.getCalls()
+            .map((call) => call.args[0]);
+        assert.ok(drawn.includes(next));
+
+        // Frames of another session, or for a still background, are dropped
+        const stale = bitmap();
+        await send({ type: 'background-frame', session: 6, bitmap: stale });
+        assert.equal(stale.close.calledOnce, true);
+        assert.equal(state().background.bitmap, next);
+        const still = bitmap();
+        await send({ type: 'background', id: 4, background: { mode: 'image', bitmap: still } });
+        const late = bitmap();
+        await send({ type: 'background-frame', session: 7, bitmap: late });
+        assert.equal(late.close.calledOnce, true);
+        assert.equal(state().background.bitmap, still);
+        assert.equal(next.close.calledOnce, true);
+    });
+
     it('picks the person mask of multiclass models by label', async () => {
         createWorker({
             labels: ['background', 'person'],
@@ -427,6 +456,61 @@ describe('camera background worker script', () => {
         assert.equal(created[1].modelAssetPath, 'selfie.tflite');
         assert.equal(created[1].delegate, 'CPU');
         assert.equal(multiclass.close.calledOnce, true);
+    });
+
+    it('tries the selfie downgrade once and keeps the multiclass model when it cannot load', async () => {
+        createWorker({ segmentCost: 60 });
+        let attempts = 0;
+        const created = useFakeVision([
+            (url) => {
+                if (url !== 'selfie.tflite') return false;
+                attempts++;
+                return true;
+            },
+        ]);
+        context.config = modelConfig;
+        await vm.runInContext('workerConfig = config; loadModel(config)', context);
+        await startFrames();
+        vm.runInContext('segmentCount = 20;', context);
+        for (let id = 3; id < 8; id++) {
+            await send({ type: 'frame', id, session: 7, bitmap: bitmap(), timestamp: id * 40 });
+            await flush();
+        }
+
+        assert.equal(attempts, 1);
+        assert.equal(vm.runInContext('model.name', context), 'multiclass');
+        assert.equal(vm.runInContext('segmenter', context), created[0]);
+        assert.equal(created[0].close.called, false);
+    });
+
+    it('restores the WASM factory each time MediaPipe imports its (cached) loader module', async () => {
+        const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'mp-loader-'));
+        const loaderFile = path.join(dir, 'loader.mjs');
+        // Like vision_wasm_module_internal.js: sets the global once (first evaluation) and exports the factory
+        fs.writeFileSync(
+            loaderFile,
+            'export default async function ModuleFactory() {}\nglobalThis.loaderRuns = (globalThis.loaderRuns || 0) + 1;\n'
+        );
+        try {
+            const self = {};
+            const workerContext = vm.createContext({ self, console });
+            vm.runInContext(read('background-effects-worker.js'), workerContext, {
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            });
+            vm.runInContext('installWasmLoaderImport()', workerContext);
+            const url = require('url').pathToFileURL(loaderFile).href;
+            const { default: factory } = await import(url);
+            for (let load = 0; load < 3; load++) {
+                // MediaPipe clears the factory after creating each segmenter
+                self.ModuleFactory = undefined;
+                await self.import(url);
+                assert.equal(self.ModuleFactory, factory, `factory available for model ${load + 1}`);
+            }
+            assert.equal(globalThis.loaderRuns, 1, 'the loader module itself runs only once');
+        } finally {
+            delete globalThis.loaderRuns;
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     it('stabilizes the mask between segmentations and starts fresh for a new session', async () => {
@@ -1023,6 +1107,24 @@ describe('camera background worker transports', () => {
         assert.equal(message.transfer[0], image);
     });
 
+    it('transfers video background frames without waiting for a reply, and drops them once stopped', async () => {
+        const { engine, workers } = createEngine();
+        await engine.init();
+        const session = { id: 3, stopped: false };
+        const frame = bitmap();
+        engine.sendBackgroundFrame(session, frame);
+        const message = workers[0].messages.at(-1);
+        assert.deepEqual(plain(message.message), { type: 'background-frame', session: 3, bitmap: plain(frame) });
+        assert.equal(message.transfer[0], frame);
+        assert.equal(engine.pending.size, 0);
+
+        session.stopped = true;
+        const late = bitmap();
+        engine.sendBackgroundFrame(session, late);
+        assert.equal(late.close.calledOnce, true);
+        assert.equal(workers[0].messages.at(-1), message);
+    });
+
     it('rejects pending requests and ends sessions when the worker dies', async () => {
         const { engine, workers } = createEngine();
         await engine.init();
@@ -1164,6 +1266,104 @@ describe('camera background engine selection', () => {
         assert.equal(sent.bitmap.height, 960);
         assert.equal(effects.mode, 'blur');
         assert.equal(effects.outputTrack, outputTrack);
+    });
+
+    function backgroundVideo() {
+        const video = {
+            nodeName: 'VIDEO',
+            videoWidth: 1920,
+            videoHeight: 1080,
+            readyState: 2,
+            currentTime: 0,
+            paused: true,
+        };
+        video.play = sinon.spy(async () => (video.paused = false));
+        video.pause = sinon.spy(() => (video.paused = true));
+        return video;
+    }
+
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    it('plays a video background and keeps sending its new frames, capped at 1280x720, to the worker', async () => {
+        const effects = createEffects();
+        context.createImageBitmap = async (source, options) => ({
+            width: options?.resizeWidth || source.videoWidth || source.width,
+            height: options?.resizeHeight || source.videoHeight || source.height,
+            close: sinon.spy(),
+        });
+        engine.sendBackgroundFrame = sinon.spy();
+        await effects.start(input());
+        const video = backgroundVideo();
+
+        await effects.setMode('image', video);
+        assert.equal(video.play.calledOnce, true);
+        const sent = engine.setBackground.firstCall.args[0];
+        assert.equal(sent.mode, 'image');
+        assert.equal(sent.animated, true);
+        assert.deepEqual([sent.bitmap.width, sent.bitmap.height], [1280, 720]);
+
+        await wait(60);
+        assert.equal(engine.sendBackgroundFrame.callCount, 1);
+        const [session, frame] = engine.sendBackgroundFrame.firstCall.args;
+        assert.equal(session, effects.session);
+        assert.equal(frame.width, 1280);
+        // No new frame decoded: nothing more to send
+        await wait(60);
+        assert.equal(engine.sendBackgroundFrame.callCount, 1);
+        video.currentTime = 0.04;
+        await wait(60);
+        assert.equal(engine.sendBackgroundFrame.callCount, 2);
+
+        // Another background pauses the clip and stops the frames
+        await effects.setMode('blur');
+        assert.equal(video.pause.calledOnce, true);
+        video.currentTime = 0.08;
+        await wait(60);
+        assert.equal(engine.sendBackgroundFrame.callCount, 2);
+        effects.stop(false);
+    });
+
+    it('pauses the video background when the effect stops', async () => {
+        const effects = createEffects();
+        engine.sendBackgroundFrame = sinon.spy();
+        await effects.start(input());
+        const video = backgroundVideo();
+        await effects.setMode('image', video);
+        effects.stop(false);
+        assert.equal(video.pause.calledOnce, true);
+        video.currentTime = 1;
+        await wait(60);
+        assert.equal(engine.sendBackgroundFrame.called, false);
+    });
+
+    it('leaves a video background playing that a newer pipeline took over', async () => {
+        const first = createEffects();
+        await first.start(input());
+        const video = backgroundVideo();
+        await first.setMode('image', video);
+        const second = vm.runInContext('new BackgroundEffects(onError)', context);
+        second.loadModel = sinon.stub().resolves();
+        context.BackgroundEffectsWorker.shared = sinon.stub().resolves(null);
+        await second.start(input());
+        await second.setMode('image', video);
+        first.stop(false);
+        assert.equal(video.pause.called, false);
+        second.stop(false);
+        assert.equal(video.pause.calledOnce, true);
+    });
+
+    it('draws a video background live on the main thread', async () => {
+        const effects = createEffects({ worker: false });
+        effects.loadModel = sinon.stub().resolves();
+        await effects.start(input());
+        const video = backgroundVideo();
+        await effects.setMode('image', video);
+        assert.equal(video.play.calledOnce, true);
+        assert.equal(effects.image, video);
+        assert.equal(engine.setBackground.called, false);
+        assert.equal(effects.backgroundPump, null);
+        effects.stop(false);
+        assert.equal(video.pause.calledOnce, true);
     });
 
     it('stops the output before ending the worker session and keeps the camera when asked', async () => {

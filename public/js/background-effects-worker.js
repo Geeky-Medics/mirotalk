@@ -41,6 +41,7 @@ let fileset = null;
 let workerConfig = null;
 let model = null;
 let downgrading = false;
+let downgradeFailed = false;
 let segmentCount = 0;
 let stabilizeMask = null;
 let maskSource = null;
@@ -177,14 +178,29 @@ async function downgradeModel() {
         await loadCandidate({ name: 'selfie', url: workerConfig.modelUrl, delegate: 'CPU' });
         console.warn('Camera background: multiclass segmentation too slow, using the selfie model');
     } catch (error) {
-        console.warn('Camera background: selfie model fallback failed', error);
+        // Tried once: keep the multiclass model instead of retrying on every mask
+        downgradeFailed = true;
+        console.warn('Camera background: selfie model fallback failed, keeping the multiclass model', error);
     } finally {
         downgrading = false;
     }
 }
 
+// In module workers MediaPipe loads its WASM loader with import(), which runs the loader (and so sets
+// self.ModuleFactory) only once per worker, while each new segmenter clears self.ModuleFactory: every model
+// after the first one (fallback candidates, the selfie downgrade) failed with "ModuleFactory not set".
+// MediaPipe uses self.import when defined: restore the factory from the loader's default export.
+function installWasmLoaderImport() {
+    self.import = async (url) => {
+        const loader = await import(url);
+        if (typeof loader?.default === 'function') self.ModuleFactory = loader.default;
+        return loader;
+    };
+}
+
 async function loadSegmenter(config) {
     vision = await import(config.visionBundleUrl);
+    installWasmLoaderImport();
     // true: load the ES module build of the WASM loader, module workers have no importScripts()
     fileset = await vision.FilesetResolver.forVisionTasks(config.wasmBaseUrl, true);
     await loadModel(config);
@@ -232,6 +248,7 @@ function recordSegmentMs(elapsed) {
     if (
         model?.name === 'multiclass' &&
         !downgrading &&
+        !downgradeFailed &&
         segmentCount > MODEL_WARMUP_SEGMENTS &&
         state.segmentMs > MAX_MULTICLASS_SEGMENT_MS
     ) {
@@ -674,7 +691,8 @@ function runPipeline(readable, writable, id) {
         });
 }
 
-// background: { mode: 'off' } (frames pass through), { mode: 'blur' } or { mode: 'image', bitmap }
+// background: { mode: 'off' } (frames pass through), { mode: 'blur' } or { mode: 'image', bitmap, animated? }.
+// Animated (video) backgrounds get their next frames through 'background-frame' messages.
 function setBackground(background) {
     const previous = state.background;
     if (!['off', 'blur', 'image'].includes(background?.mode)) {
@@ -683,6 +701,18 @@ function setBackground(background) {
     if (background.mode === 'image' && !background.bitmap) throw new Error('Background image missing');
     state.background = background.mode === 'off' ? null : background;
     if (previous?.bitmap && previous.bitmap !== background.bitmap) closeBitmap(previous.bitmap);
+}
+
+// The page keeps sending the current frame of a video background: composite with the latest one
+function setBackgroundFrame({ session: sessionId, bitmap }) {
+    const background = state.background;
+    if (sessionId !== session.id || !background?.animated) {
+        closeBitmap(bitmap);
+        return;
+    }
+    const previous = background.bitmap;
+    background.bitmap = bitmap;
+    if (previous !== bitmap) closeBitmap(previous);
 }
 
 async function stopSession() {
@@ -777,6 +807,9 @@ function runCompositorRole() {
             case 'frame':
                 // The page sends the next frame only after receiving the previous one
                 void processBitmap(message);
+                break;
+            case 'background-frame':
+                setBackgroundFrame(message);
                 break;
             case 'close':
                 controlQueue = controlQueue.then(async () => {
