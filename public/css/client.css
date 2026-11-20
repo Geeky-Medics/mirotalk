@@ -693,6 +693,10 @@ body {
     display: block;
 }
 
+.init-user:has(#initBackgroundPicker:not(.is-collapsed) > #initBackgroundImageGrid:not([hidden])) #initVideoMirrorBtn {
+    display: none !important;
+}
+
 /* Fixed-height rows so the cap always ends mid-row: the cut tile shows there is more to scroll */
 #initBackgroundImageGrid {
     --init-bg-row: 56px;
@@ -707,9 +711,10 @@ body {
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+    scrollbar-color: #4678f9 transparent;
 }
 
+/* Landing page scrollbar colors, kept thin for the compact picker */
 #initBackgroundImageGrid::-webkit-scrollbar {
     width: 6px;
 }
@@ -719,8 +724,13 @@ body {
 }
 
 #initBackgroundImageGrid::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.25);
+    background: #4678f9;
     border-radius: 6px;
+    cursor: pointer;
+}
+
+#initBackgroundImageGrid::-webkit-scrollbar-thumb:hover {
+    background-color: #376df9;
 }
 
 .init-background-picker #initBackgroundImageGrid .camera-bg-card {
@@ -5475,13 +5485,12 @@ body.room-bg-active #videoMediaContainer.mouse-light {
     margin-top: 24px;
 }
 
-/* Live camera preview (full-screen settings only) */
+/* Live camera preview while settings is open (compact on desktop, full width on mobile) */
 .settings-video-preview {
     position: relative;
-    width: 100%;
+    width: min(100%, 420px, calc(32vh * 16 / 9));
     aspect-ratio: 16 / 9;
-    max-height: 40vh;
-    margin-bottom: 12px;
+    margin: 0 0 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
     overflow: hidden;
