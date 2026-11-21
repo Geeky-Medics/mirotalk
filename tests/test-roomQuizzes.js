@@ -190,8 +190,8 @@ describe('room quizzes', () => {
             assert.equal(view.average_score, 1.5);
             assert.equal(view.leaderboard, undefined, 'anonymous: no names for the participants');
             assert.deepEqual(RoomQuizzes.toPublic(quiz, host.key, true).leaderboard, [
-                { name: 'Bob', score: 2, answers: [0, 1, 0] },
-                { name: 'Alice', score: 1, answers: [1, 0, -1] },
+                { name: 'Bob', avatar: '', score: 2, answers: [0, 1, 0] },
+                { name: 'Alice', avatar: '', score: 1, answers: [1, 0, -1] },
             ]);
             assert.equal(
                 RoomQuizzes.toPublic(quiz, alice.key, true).leaderboard.length,
@@ -207,8 +207,8 @@ describe('room quizzes', () => {
             RoomQuizzes.answer('r', quiz.id, { key: 'u:2', name: 'Guest' }, 0, 0);
             RoomQuizzes.finish(quiz);
             assert.deepEqual(RoomQuizzes.toPublic(quiz, host.key).leaderboard, [
-                { name: 'Guest', score: 1, answers: [1, -1, -1] },
-                { name: 'Guest', score: 0, answers: [0, -1, -1] },
+                { name: 'Guest', avatar: '', score: 1, answers: [1, -1, -1] },
+                { name: 'Guest', avatar: '', score: 0, answers: [0, -1, -1] },
             ]);
         });
 
@@ -229,8 +229,8 @@ describe('room quizzes', () => {
             RoomQuizzes.finish(quiz);
             view = RoomQuizzes.toPublic(quiz, bob.key);
             assert.deepEqual(view.leaderboard, [
-                { name: 'Alice', score: 2 },
-                { name: 'Bob', score: 0 },
+                { name: 'Alice', avatar: '', score: 2 },
+                { name: 'Bob', avatar: '', score: 0 },
             ]);
             assert.ok(
                 view.leaderboard.every((entry) => !('answers' in entry)),
@@ -350,6 +350,30 @@ describe('room quizzes', () => {
             assert.ok(Date.now() - started < 500);
             assert.equal(quiz.title.length, RoomQuizzes.LIMITS.MAX_TITLE_LENGTH - 1, 'cut on a word boundary trim');
             assert.equal(quiz.questions[0].options[0].length <= RoomQuizzes.LIMITS.MAX_OPTION_LENGTH, true);
+        });
+
+        it('sends the avatars with the names only, and only safe URLs', () => {
+            const quiz = createQuiz({ mode: 'all', anonymous: true });
+            RoomQuizzes.start(quiz);
+            RoomQuizzes.answer('r', quiz.id, { ...alice, avatar: 'https://cdn.test/alice.png' }, 0, 1);
+            RoomQuizzes.answer('r', quiz.id, { ...bob, avatar: 'javascript:alert(1)' }, 0, 0);
+            RoomQuizzes.answer('r', quiz.id, { key: 'u:carol', name: 'Carol', avatar: 'x'.repeat(3000) }, 0, 0);
+
+            const presenter = RoomQuizzes.toPublic(quiz, host.key, true);
+            assert.deepEqual(presenter.questions[0].options[0].voters, ['Bob', 'Carol']);
+            assert.deepEqual(presenter.questions[0].options[0].voter_avatars, ['', ''], 'unsafe or oversized: none');
+            assert.deepEqual(presenter.questions[0].options[1].voter_avatars, ['https://cdn.test/alice.png']);
+            assert.equal(
+                presenter.leaderboard.find((entry) => entry.name === 'Alice').avatar,
+                'https://cdn.test/alice.png'
+            );
+
+            // Anonymous: participants and a participant creator get neither names nor avatars
+            for (const view of [RoomQuizzes.toPublic(quiz, alice.key), RoomQuizzes.toPublic(quiz, host.key)]) {
+                assert.ok(!JSON.stringify(view).includes('cdn.test'));
+            }
+            RoomQuizzes.finish(quiz);
+            assert.ok(!JSON.stringify(RoomQuizzes.toPublic(quiz, bob.key)).includes('cdn.test'));
         });
 
         it('serializes per viewer without leaking voter keys, removes and clears', () => {
@@ -560,7 +584,7 @@ describe('room quizzes', () => {
             assert.equal(view.revealed_count, 2);
             assert.equal(view.leaderboard, undefined);
             assert.deepEqual(last(presenter, 'update').quiz.leaderboard, [
-                { name: 'guest', score: 1, answers: [0, 1, -1] },
+                { name: 'guest', avatar: '', score: 1, answers: [0, 1, -1] },
             ]);
 
             // Voter identities never reach the clients
@@ -646,7 +670,13 @@ describe('room quizzes', () => {
     // ####################################################
 
     describe('client UI', () => {
-        function setup() {
+        // Text buttons by their text, icon buttons by their accessible label
+        const buttonLabels = (doc) =>
+            [...doc.querySelectorAll('.poll-card-actions button')].map(
+                (b) => b.textContent.trim() || b.getAttribute('aria-label')
+            );
+
+        function setup(extraOptions = {}) {
             const dom = new JSDOM(
                 `<form id="quizForm" class="hidden">
                     <input id="quizTitle" type="text" />
@@ -698,6 +728,7 @@ describe('room quizzes', () => {
                 onLoaded: (title) => loaded.push(title),
                 translate: (text) => text,
                 download: (blob, fileName) => downloads.push({ blob, fileName }),
+                ...extraOptions,
             });
             return { window, doc, quizzes, sent, errors, events, downloads, loaded };
         }
@@ -798,16 +829,21 @@ describe('room quizzes', () => {
                 is_mine: true,
                 can_manage: true,
                 questions: [live, question({ index: 1, state: 'pending' })],
-                leaderboard: [{ name: 'Ann', score: 0 }],
+                leaderboard: [{ name: 'Ann', avatar: '', score: 0 }],
             });
             quizzes.handle({ action: 'update', quiz: managed });
 
             const chips = [...doc.querySelectorAll('.quiz-voter')];
             assert.deepEqual(
-                chips.map((chip) => [chip.textContent, chip.classList.contains('is-correct')]),
+                chips.map((chip) => [
+                    chip.querySelector('.quiz-voter-name').textContent,
+                    chip.querySelector('.quiz-avatar').textContent,
+                    chip.title,
+                    chip.classList.contains('is-correct'),
+                ]),
                 [
-                    ['Ann', false],
-                    ['Max', true],
+                    ['Ann', 'AN', 'Ann', false],
+                    ['Max', 'MA', 'Max', true],
                 ]
             );
             assert.ok(chips[0].classList.contains('is-wrong'));
@@ -817,9 +853,21 @@ describe('room quizzes', () => {
             );
             assert.equal(doc.querySelector('.quiz-leaderboard'), null, 'no ranking before the first reveal');
 
-            const labels = () =>
-                [...doc.querySelectorAll('.poll-card-actions button')].map((b) => b.textContent.trim());
+            const labels = () => buttonLabels(doc);
             assert.deepEqual(labels(), ['Reveal answer', 'Finish quiz', 'Save to file', 'Delete']);
+            // Flow actions on the left, icon tools (labelled, with a tooltip) on the right
+            assert.deepEqual(
+                [...doc.querySelectorAll('.quiz-actions-main button')].map((b) => b.textContent.trim()),
+                ['Reveal answer', 'Finish quiz']
+            );
+            const tools = [...doc.querySelectorAll('.quiz-actions-tools .quiz-icon-btn')];
+            assert.deepEqual(
+                tools.map((b) => [b.getAttribute('aria-label'), b.title, b.textContent]),
+                [
+                    ['Save to file', 'Save to file', ''],
+                    ['Delete', 'Delete', ''],
+                ]
+            );
             doc.querySelector('.poll-card-actions button').click();
             assert.deepEqual(sent, [{ action: 'reveal', quiz_id: 'q1' }]);
 
@@ -848,6 +896,114 @@ describe('room quizzes', () => {
             assert.ok(!doc.getElementById('quizEmpty').classList.contains('hidden'));
         });
 
+        it('shows the participant pictures and falls back to the initials', () => {
+            const resolved = [];
+            const { window, doc, quizzes } = setup({
+                resolveAvatar: (name, avatarUrl) => {
+                    resolved.push([name, avatarUrl]);
+                    if (avatarUrl) return avatarUrl;
+                    if (name.includes('@')) return 'https://www.gravatar.com/avatar/x?d=404';
+                    return name === 'Evil' ? 'javascript:alert(1)' : null;
+                },
+            });
+            const quiz = sampleQuiz({
+                can_manage: true,
+                status: 'finished',
+                anonymous: false,
+                revealed_count: 1,
+                questions: [
+                    question({
+                        state: 'revealed',
+                        correct: 0,
+                        total_answers: 4,
+                        options: [
+                            {
+                                text: 'A',
+                                votes: 4,
+                                voters: ['Ann', 'bob@mail.test', 'Evil', 'Max'],
+                                voter_avatars: ['https://cdn.test/ann.png', '', '', 'data:image/svg+xml,<svg/>'],
+                            },
+                            { text: 'B', votes: 0 },
+                        ],
+                    }),
+                ],
+                leaderboard: [{ name: 'Ann', avatar: 'https://cdn.test/ann.png', score: 1, answers: [0] }],
+            });
+            quizzes.handle({ action: 'list', quizzes: [quiz] });
+            quizzes.toggleReview(quiz.id); // finished: the questions are behind "Show questions"
+            const avatars = [...doc.querySelectorAll('.quiz-voters .quiz-voter > :first-child')];
+            assert.deepEqual(
+                avatars.map((el) => [el.tagName, el.getAttribute('src') || el.textContent]),
+                [
+                    ['IMG', 'https://cdn.test/ann.png'],
+                    ['IMG', 'https://www.gravatar.com/avatar/x?d=404'],
+                    ['SPAN', 'EV'],
+                    ['SPAN', 'MA'],
+                ]
+            );
+            assert.deepEqual(
+                resolved.find(([name]) => name === 'Max'),
+                ['Max', ''],
+                'only http(s) avatars reach the resolver'
+            );
+            const img = avatars[0];
+            assert.equal(img.alt, '');
+            assert.equal(img.getAttribute('aria-hidden'), 'true');
+            assert.equal(img.referrerPolicy, 'no-referrer');
+            assert.equal(
+                doc.querySelector('.quiz-leaderboard-item img.quiz-avatar').getAttribute('src'),
+                'https://cdn.test/ann.png'
+            );
+
+            // A picture that does not load: initials, and no new request on the next updates
+            avatars[1].dispatchEvent(new window.Event('error'));
+            assert.equal(doc.querySelectorAll('.quiz-voters .quiz-voter > :first-child')[1].textContent, 'BO');
+            quizzes.handle({ action: 'list', quizzes: [quiz] });
+            assert.equal(doc.querySelectorAll('.quiz-voters .quiz-voter > :first-child')[1].tagName, 'SPAN');
+            assert.equal(doc.querySelectorAll('.quiz-voters img').length, 1);
+        });
+
+        it('shows avatar chips, collapses the overflow and keeps hostile names as text', () => {
+            const { window, doc, quizzes } = setup();
+            const voters = ['<img src=x onerror=alert(1)>', ...Array.from({ length: 14 }, (_, i) => `Voter ${i + 1}`)];
+            quizzes.handle({
+                action: 'list',
+                quizzes: [
+                    sampleQuiz({
+                        can_manage: true,
+                        questions: [
+                            question({
+                                correct: 0,
+                                total_answers: voters.length,
+                                options: [
+                                    { text: 'A', votes: voters.length, voters },
+                                    { text: 'B', votes: 0 },
+                                ],
+                            }),
+                        ],
+                    }),
+                ],
+            });
+            const chips = [...doc.querySelectorAll('.quiz-voters .quiz-voter')];
+            assert.equal(chips.length, 13, '12 names and a +N chip');
+            assert.equal(doc.querySelector('img'), null, 'no HTML injection');
+            assert.equal(chips[0].querySelector('.quiz-voter-name').textContent, '<img src=x onerror=alert(1)>');
+            assert.equal(chips[0].querySelector('.quiz-avatar').textContent, '<I');
+            const more = chips.at(-1);
+            assert.ok(more.classList.contains('quiz-voter-more'));
+            assert.equal(more.textContent, '+3');
+            assert.equal(more.title, 'Voter 12, Voter 13, Voter 14');
+            assert.ok(chips.slice(0, 12).every((chip) => chip.classList.contains('is-correct')));
+
+            // Same deterministic color as the default video tile avatar (genAvatarSvg)
+            const avatar = window.RoomQuizzes.avatar('Bob');
+            const red = Math.pow('B'.charCodeAt(0), 7) % 200;
+            const green = Math.pow('o'.charCodeAt(0), 7) % 200;
+            assert.equal(avatar.style.backgroundColor, `rgb(${red}, ${green}, ${(red + green) % 200})`);
+            assert.equal(avatar.getAttribute('aria-hidden'), 'true');
+            assert.equal(window.RoomQuizzes.avatar('').textContent, '?');
+        });
+
         it('renders the final results and the leaderboard', () => {
             const { doc, quizzes } = setup();
             quizzes.handle({
@@ -862,9 +1018,9 @@ describe('room quizzes', () => {
                         average_score: 1.3,
                         questions: [question({ state: 'revealed', correct: 0, my_answer: 0 })],
                         leaderboard: [
-                            { name: 'Me', score: 2 },
-                            { name: 'Ann', score: 2 },
-                            { name: 'Max', score: 0 },
+                            { name: 'Me', avatar: '', score: 2 },
+                            { name: 'Ann', avatar: '', score: 2 },
+                            { name: 'Max', avatar: '', score: 0 },
                         ],
                     }),
                 ],
@@ -876,6 +1032,10 @@ describe('room quizzes', () => {
                 [...doc.querySelectorAll('.quiz-leaderboard-item')].map((item) => item.dataset.rank),
                 ['1', '1', '3'],
                 'same score, same rank'
+            );
+            assert.deepEqual(
+                [...doc.querySelectorAll('.quiz-leaderboard-item .quiz-avatar')].map((el) => el.textContent),
+                ['ME', 'AN', 'MA']
             );
             assert.equal(doc.getElementById('quizCount').textContent, '');
 
@@ -901,10 +1061,7 @@ describe('room quizzes', () => {
             assert.equal(doc.querySelector('.quiz-leaderboard-wrap'), null);
             quizzes.handle({ action: 'list', quizzes: [{ ...base, status: 'finished' }] });
             assert.equal(doc.querySelector('.quiz-leaderboard-wrap'), null);
-            assert.deepEqual(
-                [...doc.querySelectorAll('.poll-card-actions button')].map((b) => b.textContent.trim()),
-                ['Save to file', 'Delete']
-            );
+            assert.deepEqual(buttonLabels(doc), ['Save to file', 'Delete']);
         });
 
         it('lets the managers download the results of a finished quiz as CSV', async () => {
@@ -934,16 +1091,15 @@ describe('room quizzes', () => {
                     question({ index: 2, state: 'pending', text: 'Never asked' }),
                 ],
                 leaderboard: [
-                    { name: 'Ann', score: 2, answers: [1, 0, -1] },
-                    { name: '=HYPERLINK("x")', score: 0, answers: [0, 1, -1] },
-                    { name: 'Max', score: 0, answers: [-1, -1, -1] },
+                    { name: 'Ann', avatar: '', score: 2, answers: [1, 0, -1] },
+                    { name: '=HYPERLINK("x")', avatar: '', score: 0, answers: [0, 1, -1] },
+                    { name: 'Max', avatar: '', score: 0, answers: [-1, -1, -1] },
                 ],
             });
 
             // Running quiz: no export yet
             quizzes.handle({ action: 'list', quizzes: [{ ...finished, status: 'running' }] });
-            const labels = () =>
-                [...doc.querySelectorAll('.poll-card-actions button')].map((b) => b.textContent.trim());
+            const labels = () => buttonLabels(doc);
             assert.ok(!labels().includes('Download results'));
 
             quizzes.handle({ action: 'list', quizzes: [finished] });
@@ -1114,9 +1270,7 @@ describe('room quizzes', () => {
                 ],
             });
             quizzes.handle({ action: 'list', quizzes: [managed] });
-            [...doc.querySelectorAll('.poll-card-actions button')]
-                .find((btn) => btn.textContent.trim() === 'Save to file')
-                .click();
+            doc.querySelector('.poll-card-actions button[aria-label="Save to file"]').click();
             assert.equal(downloads[0].fileName, 'Quiz-Geo.json');
             assert.deepEqual((await readDownload(window, downloads[0])).questions, [
                 { question: 'First', options: ['a', 'b'], correct: 1 },

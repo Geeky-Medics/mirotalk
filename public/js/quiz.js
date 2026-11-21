@@ -24,6 +24,7 @@ class RoomQuizzes {
     static FILE_TYPE = 'mirotalk-quiz';
     static FILE_VERSION = 1;
     static MAX_FILE_SIZE = 512 * 1024;
+    static MAX_VISIBLE_VOTERS = 12;
 
     /**
      * @param {object} options
@@ -36,6 +37,8 @@ class RoomQuizzes {
      * @param {function} [options.confirmDelete] (quiz) => Promise<boolean>
      * @param {function} [options.translate] (text) => string
      * @param {function} [options.download] (blob, fileName) => void
+     * @param {function} [options.resolveAvatar] (name, avatarUrl) => string|null, the avatar image to show
+     *        (e.g. the Gravatar of an e-mail name like the video tiles), null for the initials avatar
      */
     constructor(options) {
         this.el = options.elements;
@@ -47,6 +50,8 @@ class RoomQuizzes {
         this.confirmDelete = options.confirmDelete || (() => Promise.resolve(true));
         this.translate = options.translate || ((text) => window.i18n?.t?.(text, 'labels') || text);
         this.download = options.download || RoomQuizzes.saveBlob;
+        this.resolveAvatar = options.resolveAvatar || ((name, avatarUrl) => avatarUrl || null);
+        this.failedAvatars = new Set(); // avatar URLs that did not load: initials, no retry on every update
         this.quizzes = new Map();
         this.expanded = new Set(); // quiz ids with the question review open
         this.formSeq = 0; // unique radio group names in the builder
@@ -459,6 +464,22 @@ class RoomQuizzes {
         return btn;
     }
 
+    /**
+     * Compact icon button, labelled for screen readers and with a native tooltip
+     */
+    iconButton(label, icon, className, onClick) {
+        const btn = RoomQuizzes.createEl(
+            'button',
+            'poll-btn poll-btn-small quiz-icon-btn' + (className ? ' ' + className : '')
+        );
+        btn.type = 'button';
+        btn.title = label;
+        btn.setAttribute('aria-label', label);
+        btn.appendChild(RoomQuizzes.createEl('i', icon));
+        btn.addEventListener('click', onClick);
+        return btn;
+    }
+
     render() {
         const quizzes = this.getQuizzes();
         const cards = quizzes.map((quiz) => this.renderQuiz(quiz));
@@ -679,9 +700,13 @@ class RoomQuizzes {
             const rank = ranks[index];
             const item = createEl('li', 'quiz-leaderboard-item');
             item.dataset.rank = String(rank);
+            const name = String(entry.name);
+            const nameEl = RoomQuizzes.noTranslate(createEl('span', 'quiz-leaderboard-name', name));
+            nameEl.title = name;
             item.append(
                 createEl('span', 'quiz-rank', String(rank)),
-                RoomQuizzes.noTranslate(createEl('span', 'quiz-leaderboard-name', String(entry.name))),
+                this.avatarFor(name, entry.avatar),
+                nameEl,
                 createEl('span', 'quiz-leaderboard-score', `${Number(entry.score) || 0}/${quiz.revealed_count}`)
             );
             list.appendChild(item);
@@ -767,21 +792,116 @@ class RoomQuizzes {
 
         // Names: color coded once the correct option is known (always for the managers)
         if (Array.isArray(option.voters) && option.voters.length > 0) {
-            const voters = RoomQuizzes.noTranslate(createEl('div', 'quiz-voters'));
-            option.voters.forEach((name) => {
-                const chip = createEl('span', 'quiz-voter', String(name));
-                if (known) chip.classList.add(isCorrect ? 'is-correct' : 'is-wrong');
-                voters.appendChild(chip);
-            });
-            item.appendChild(voters);
+            item.appendChild(
+                this.renderVoters(
+                    option.voters,
+                    known ? (isCorrect ? 'is-correct' : 'is-wrong') : '',
+                    Array.isArray(option.voter_avatars) ? option.voter_avatars : []
+                )
+            );
         }
         return item;
     }
 
+    /**
+     * Round initials avatar, colored from the name like the default video tile avatar
+     * (the text is set with textContent, so any name is safe)
+     * @param {string} name
+     * @returns {HTMLElement}
+     */
+    static avatar(name) {
+        const text = String(name || '?');
+        const red = Math.pow(text.charCodeAt(0), 7) % 200;
+        const green = Math.pow(text.charCodeAt(1) || text.charCodeAt(0), 7) % 200;
+        const blue = (red + green) % 200;
+        const avatar = RoomQuizzes.createEl('span', 'quiz-avatar', text.substring(0, 2).toUpperCase());
+        avatar.style.backgroundColor = `rgb(${red}, ${green}, ${blue})`;
+        avatar.setAttribute('aria-hidden', 'true');
+        return avatar;
+    }
+
+    /**
+     * @param {*} url
+     * @returns {boolean} http(s) URL, the only avatar sources rendered
+     */
+    static isSafeAvatarUrl(url) {
+        if (typeof url !== 'string' || !url) return false;
+        try {
+            const parsed = new URL(url);
+            return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Participant avatar: the picture the room shows for them (custom avatar, Gravatar...),
+     * else, or when it does not load, the initials avatar
+     * @param {string} name
+     * @param {string} [avatarUrl] avatar sent by the server with the name
+     * @returns {HTMLElement}
+     */
+    avatarFor(name, avatarUrl) {
+        let url = null;
+        try {
+            url = this.resolveAvatar(String(name), RoomQuizzes.isSafeAvatarUrl(avatarUrl) ? avatarUrl : '');
+        } catch {
+            url = null;
+        }
+        if (!RoomQuizzes.isSafeAvatarUrl(url) || this.failedAvatars.has(url)) return RoomQuizzes.avatar(name);
+        const img = RoomQuizzes.createEl('img', 'quiz-avatar quiz-avatar-img');
+        img.alt = '';
+        img.setAttribute('aria-hidden', 'true');
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.referrerPolicy = 'no-referrer';
+        img.addEventListener(
+            'error',
+            () => {
+                this.failedAvatars.add(url);
+                img.replaceWith(RoomQuizzes.avatar(name));
+            },
+            { once: true }
+        );
+        img.src = url;
+        return img;
+    }
+
+    /**
+     * Who answered an option: avatar + name chips on a wrapping row, the overflow in a "+N" chip
+     * @param {string[]} names
+     * @param {string} state 'is-correct' | 'is-wrong' | ''
+     * @param {string[]} [avatars] avatar URLs, same order as names
+     * @returns {HTMLElement}
+     */
+    renderVoters(names, state, avatars = []) {
+        const { createEl } = RoomQuizzes;
+        const voters = RoomQuizzes.noTranslate(createEl('div', 'quiz-voters'));
+        const visible = names.slice(0, RoomQuizzes.MAX_VISIBLE_VOTERS);
+        visible.forEach((value, index) => {
+            const name = String(value);
+            const chip = createEl('span', 'quiz-voter' + (state ? ' ' + state : ''));
+            chip.title = name;
+            chip.append(this.avatarFor(name, avatars[index]), createEl('span', 'quiz-voter-name', name));
+            voters.appendChild(chip);
+        });
+        const hidden = names.slice(visible.length).map(String);
+        if (hidden.length > 0) {
+            const more = createEl('span', 'quiz-voter quiz-voter-more', '+' + hidden.length);
+            more.title = hidden.join(', ');
+            voters.appendChild(more);
+        }
+        return voters;
+    }
+
     renderActions(quiz) {
-        const actions = RoomQuizzes.createEl('div', 'poll-card-actions');
+        const { createEl } = RoomQuizzes;
+        // Quiz flow on the left (wraps on narrow panels), file and delete tools always on the right
+        const actions = createEl('div', 'poll-card-actions quiz-card-actions');
+        const main = createEl('div', 'quiz-actions-main');
+        const tools = createEl('div', 'quiz-actions-tools');
         const add = (label, icon, className, action) =>
-            actions.appendChild(this.button(label, icon, className, () => this.manage(quiz.id, action)));
+            main.appendChild(this.button(label, icon, className, () => this.manage(quiz.id, action)));
 
         if (quiz.status === 'ready') {
             add(this.t('Start quiz'), 'fas fa-play', 'poll-btn-primary', 'start');
@@ -796,18 +916,17 @@ class RoomQuizzes {
             const finishPrimary = quiz.mode === 'all' || (isLast && current?.state === 'revealed');
             add(this.t('Finish quiz'), 'fas fa-flag-checkered', finishPrimary ? 'poll-btn-primary' : '', 'finish');
         } else if (quiz.status === 'finished' && Array.isArray(quiz.leaderboard)) {
-            actions.appendChild(
+            main.appendChild(
                 this.button(this.t('Download results'), 'fas fa-download', 'poll-btn-primary', () =>
                     this.downloadResults(quiz.id)
                 )
             );
         }
-        actions.appendChild(
-            this.button(this.t('Save to file'), 'fas fa-floppy-disk', '', () => this.saveQuiz(quiz.id))
+        tools.append(
+            this.iconButton(this.t('Save to file'), 'fas fa-floppy-disk', '', () => this.saveQuiz(quiz.id)),
+            this.iconButton(this.t('Delete'), 'fas fa-trash', 'poll-btn-danger', () => this.remove(quiz.id))
         );
-        actions.appendChild(
-            this.button(this.t('Delete'), 'fas fa-trash', 'poll-btn-danger', () => this.remove(quiz.id))
-        );
+        actions.append(main, tools);
         return actions;
     }
 
