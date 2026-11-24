@@ -372,13 +372,25 @@
                 aria-label="Toggle screen sharing"
                 aria-pressed="false"
             ></button>
-            <button
-                id="myHandBtn"
-                class="fas fa-hand-paper"
-                type="button"
-                aria-label="Raise hand"
-                aria-pressed="false"
-            ></button>
+            <div id="myHandSplit" class="split-btn no-toggle">
+                <button
+                    id="myHandBtn"
+                    class="fas fa-hand-paper"
+                    type="button"
+                    aria-label="Raise hand"
+                    aria-pressed="false"
+                ></button>
+                <button
+                    id="myHandReactionsBtn"
+                    class="device-dropdown-toggle"
+                    type="button"
+                    aria-label="Room Reactions"
+                    aria-pressed="false"
+                    style="display: none"
+                >
+                    <i class="fas fa-chevron-up" aria-hidden="true"></i>
+                </button>
+            </div>
             <button
                 id="chatRoomBtn"
                 class="fas fa-comment"
@@ -491,11 +503,17 @@
                         aria-labelledby="settingsExtraToggle"
                     >
                         <!-- SHARING -->
-                        <div class="device-menu-header extra-menu-group" data-buttons="shareRoomBtn,fileShareBtn">
+                        <div
+                            class="device-menu-header extra-menu-group"
+                            data-buttons="shareRoomBtn,shareMediaBtn,fileShareBtn"
+                        >
                             SHARING
                         </div>
                         <button id="shareRoomBtn" class="app-dropdown-action">
                             <i class="fas fa-share-alt"></i> Share Room
+                        </button>
+                        <button id="shareMediaBtn" class="app-dropdown-action">
+                            <i class="fab fa-youtube"></i> Share media
                         </button>
                         <button id="fileShareBtn" class="app-dropdown-action">
                             <i class="fas fa-folder-open"></i> File sharing
@@ -2753,45 +2771,6 @@
         </div>
 
         <!-- Stop File Receive -->
-
-        <!-- Start video URL iframe -->
-
-        <div id="videoUrlCont" class="center fadein">
-            <div id="videoUrlHeader">
-                <button
-                    id="videoUrlCloseBtn"
-                    class="fas fa-times panel-close-button"
-                    aria-label="Close shared media"
-                ></button>
-            </div>
-
-            <iframe
-                id="videoUrlIframe"
-                title="Video Url Player"
-                src=""
-                frameborder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowfullscreen
-            ></iframe>
-        </div>
-
-        <!-- End Youtube Iframe -->
-
-        <!-- Start Video - Audio player -->
-
-        <div id="videoAudioUrlCont" class="center fadein">
-            <div id="videoAudioUrlHeader">
-                <button
-                    id="videoAudioCloseBtn"
-                    class="fas fa-times panel-close-button"
-                    aria-label="Close shared media"
-                ></button>
-            </div>
-
-            <video id="videoAudioUrlElement" src="" autoplay playsinline controls></video>
-        </div>
-
-        <!-- End Video - Audio player -->
 
         <!-- Start Video container -->
 

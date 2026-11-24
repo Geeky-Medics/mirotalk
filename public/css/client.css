@@ -20,8 +20,6 @@
     --caption-width: 420px;
 
     /* video iframe */
-    --iframe-width: 640px;
-    --iframe-height: 480px;
 
     /* whiteboard resize */
     --wb-width: 1920px;
@@ -1367,6 +1365,11 @@ body {
     border-bottom-left-radius: 10px;
 }
 
+/* Split button whose chevron is hidden (e.g. Raise Hand on mobile or with Room Reactions disabled). */
+#bottomButtons .split-btn.no-toggle > button:first-of-type {
+    border-radius: 10px;
+}
+
 #bottomButtons .split-btn .device-dropdown-toggle {
     border-radius: 0;
     border-top-right-radius: 10px;
@@ -1396,13 +1399,15 @@ body {
 
 /* Active state for chat / participants toolbar buttons (theme-aware) */
 #bottomButtons #chatRoomBtn.is-active,
-#bottomButtons #participantsBtn.is-active {
+#bottomButtons #participantsBtn.is-active,
+#bottomButtons #myHandReactionsBtn.is-active {
     background: color-mix(in srgb, var(--dd-color, #4678f9) 18%, var(--btns-bg-color)) !important;
     box-shadow: inset 0 0 0 1px var(--dd-color, #4678f9);
     color: var(--dd-color, #4678f9) !important;
 }
 #bottomButtons #chatRoomBtn.is-active:hover,
-#bottomButtons #participantsBtn.is-active:hover {
+#bottomButtons #participantsBtn.is-active:hover,
+#bottomButtons #myHandReactionsBtn.is-active:hover {
     background: color-mix(in srgb, var(--dd-color, #4678f9) 28%, var(--btns-bg-color)) !important;
 }
 
@@ -7628,77 +7633,6 @@ html body.swal2-toast-shown .swal2-container.swal2-top-end > .swal2-popup {
 }
 
 /*--------------------------------------------------------------
-# Video Audio IFrame
---------------------------------------------------------------*/
-
-#videoAudioUrlCont,
-#videoUrlCont {
-    z-index: 15;
-    display: none;
-    width: var(--iframe-width);
-    height: var(--iframe-height);
-    border: var(--border);
-    box-shadow: var(--box-shadow);
-    border-radius: 12px;
-}
-
-#videoAudioUrlHeader,
-#videoUrlHeader {
-    z-index: 15;
-    position: absolute;
-    display: flex;
-    left: 0px;
-    top: 0px;
-    width: 100%;
-    cursor: move;
-    border-radius: 12px;
-}
-
-#videoAudioUrlHeader button,
-#videoUrlHeader button {
-    z-index: 16;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 44px;
-    width: 44px;
-    font-size: 1.2rem;
-    margin-top: 12px;
-    margin-left: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    border-radius: 10px;
-    color: #fff;
-    background: rgba(0, 0, 0, 0.8);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
-    cursor: pointer;
-}
-
-#videoAudioUrlHeader button:hover,
-#videoUrlHeader button:hover {
-    color: var(--hover-color);
-    transform: var(--btns-hover-scale);
-    transition: all 0.3s ease-in-out;
-}
-
-#videoAudioUrlHeader button:focus-visible,
-#videoUrlHeader button:focus-visible {
-    outline: 3px solid var(--hover-color);
-    outline-offset: 2px;
-}
-
-#videoUrlIframe {
-    width: var(--iframe-width);
-    height: var(--iframe-height);
-    border-radius: 12px;
-}
-
-#videoAudioUrlElement {
-    width: var(--iframe-width);
-    height: var(--iframe-height) - 20px;
-    border-radius: 12px;
-}
-
-/*--------------------------------------------------------------
 # About
 --------------------------------------------------------------*/
 
@@ -7898,12 +7832,6 @@ html body.swal2-toast-shown .swal2-container.swal2-top-end > .swal2-popup {
 #webRTCSeo {
     /* just for SEO */
     display: none;
-}
-
-#videoAudioCloseBtn,
-#videoUrlCloseBtn {
-    border: none;
-    border-radius: 10px;
 }
 
 button.panel-close-button:hover {

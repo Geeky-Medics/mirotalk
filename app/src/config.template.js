@@ -2,7 +2,7 @@
 
 /**
  * ==============================================
- * MiroTalk P2P v.2.3.57 - Configuration File
+ * MiroTalk P2P v.2.3.62 - Configuration File
  * ==============================================
  *
  * This file is the central configuration source.
@@ -738,6 +738,7 @@ module.exports = {
             showBreakoutBtn: getEnvBoolean(process.env.SHOW_BREAKOUT_ROOM_BUTTON, true), // Presenters only, shown when breakoutRooms.enabled (BREAKOUT_ROOMS_ENABLED)
             showSnapshotRoomBtn: getEnvBoolean(process.env.SHOW_SNAPSHOT, true),
             showFileShareBtn: getEnvBoolean(process.env.SHOW_FILE_SHARE_BUTTON, true),
+            showShareMediaBtn: getEnvBoolean(process.env.SHOW_SHARE_MEDIA_BUTTON, true),
             showDocumentPipBtn: getEnvBoolean(process.env.SHOW_DOCUMENT_PIP, true),
             showAboutBtn: getEnvBoolean(process.env.SHOW_ABOUT, true), // Please keep me always true, Thank you!
         },

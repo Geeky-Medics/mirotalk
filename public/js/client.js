@@ -15,7 +15,7 @@ http://patorjk.com/software/taag/#p=display&f=ANSI%20Regular&t=Client
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.3.57
+ * @version 2.3.62
  *
  */
 
@@ -155,8 +155,6 @@ const thisInfo = getInfo();
 const lS = new LocalStorage();
 const localStorageSettings = lS.getObjectLocalStorage('P2P_SETTINGS');
 const lsSettings = { ...lS.P2P_SETTINGS, ...(localStorageSettings || {}) };
-// On mobile the buttons bar is visible by default (no mouse to reveal it), unless the user chose otherwise
-if (isMobileDevice && localStorageSettings?.keep_buttons_visible === undefined) lsSettings.keep_buttons_visible = true;
 console.log('LOCAL_STORAGE_SETTINGS', lsSettings);
 
 // Check if embedded inside an iFrame
@@ -222,6 +220,7 @@ const pollBtn = getId('pollBtn');
 const breakoutBtn = getId('breakoutBtn');
 const snapshotRoomBtn = getId('snapshotRoomBtn');
 const fileShareBtn = getId('fileShareBtn');
+const shareMediaBtn = getId('shareMediaBtn');
 const documentPiPBtn = getId('documentPiPBtn');
 const openConnectivitySettingsBtn = getId('openConnectivitySettingsBtn');
 const openNetworkSettingsBtn = getId('openNetworkSettingsBtn');
@@ -241,6 +240,8 @@ const swapCameraBtn = getId('swapCameraBtn');
 const hideMeBtn = getId('hideMeBtn');
 const screenShareBtn = getId('screenShareBtn');
 const myHandBtn = getId('myHandBtn');
+const myHandSplit = getId('myHandSplit');
+const myHandReactionsBtn = getId('myHandReactionsBtn');
 const mySettingsBtn = getId('mySettingsBtn');
 const settingsSplit = getId('settingsSplit');
 const settingsExtraDropdown = getId('settingsExtraDropdown');
@@ -641,16 +642,6 @@ const receiveProgress = getId('receiveProgress');
 const receiveHideBtn = getId('receiveHideBtn');
 const receiveAbortBtn = getId('receiveAbortBtn');
 
-// Video/audio url player
-const videoUrlCont = getId('videoUrlCont');
-const videoAudioUrlCont = getId('videoAudioUrlCont');
-const videoUrlHeader = getId('videoUrlHeader');
-const videoAudioUrlHeader = getId('videoAudioUrlHeader');
-const videoUrlCloseBtn = getId('videoUrlCloseBtn');
-const videoAudioCloseBtn = getId('videoAudioCloseBtn');
-const videoUrlIframe = getId('videoUrlIframe');
-const videoAudioUrlElement = getId('videoAudioUrlElement');
-
 // Speech recognition
 const speechRecognitionIcon = getId('speechRecognitionIcon');
 const speechRecognitionStart = getId('speechRecognitionStart');
@@ -786,6 +777,7 @@ let isRetryingMedia = false;
 
 // video/audio player
 let isVideoUrlPlayerOpen = false;
+let videoUrlPlayerSync = null; // shared media play/pause/seek sync state
 let pinnedVideoPlayerId = null;
 
 // connection
@@ -1189,8 +1181,6 @@ function setButtonsToolTip() {
     setTippy(whiteboardUndoBtn, 'Undo', 'bottom');
     setTippy(whiteboardRedoBtn, 'Redo', 'bottom');
     // Video/audio URL player
-    setTippy(videoUrlCloseBtn, 'Close the video player', 'bottom');
-    setTippy(videoAudioCloseBtn, 'Close the video player', 'bottom');
     setTippy(msgerVideoUrlBtn, 'Share a video or audio to all participants', 'top');
 }
 
@@ -1208,12 +1198,13 @@ function refreshMainButtonsToolTipPlacement() {
     // BottomButtons
     bottomButtonsPlacement = btnsBarSelect.options[btnsBarSelect.selectedIndex].value == 'horizontal' ? 'top' : 'right';
 
-    updateLeaveRoomTooltip(videoMediaContainer.childElementCount);
+    updateLeaveRoomTooltip(getParticipantTilesCount());
 
     setTippy(audioBtn, useAudio ? 'Stop the audio (A)' : 'My audio is disabled', bottomButtonsPlacement);
     setTippy(videoBtn, useVideo ? 'Stop the video (V)' : 'My video is disabled', bottomButtonsPlacement);
     setTippy(screenShareBtn, 'Start screen sharing (S)', bottomButtonsPlacement);
     setTippy(myHandBtn, 'Raise your hand (H)', bottomButtonsPlacement);
+    setTippy(myHandReactionsBtn, 'Room Reactions', bottomButtonsPlacement);
     setTippy(chatRoomBtn, 'Open the chat (C)', bottomButtonsPlacement);
     setTippy(participantsBtn, 'Show participants', bottomButtonsPlacement);
     setTippy(participantViewButton, 'Change participant view', bottomButtonsPlacement);
@@ -2020,7 +2011,6 @@ async function handleConnect() {
         setupMySettings();
         loadSettingsFromLocalStorage();
         initRoomBackground();
-        setupVideoUrlPlayer();
         handleDropdownHover();
         setupQuickDeviceSwitchDropdowns();
         startSessionTime();
@@ -2232,6 +2222,8 @@ function handleButtonsRule() {
     // Camera/microphone stay visible when blocked/unavailable (shown as unavailable); only the config hides them
     const showAudio = buttons.main.showAudioBtn;
     const showVideo = buttons.main.showVideoBtn;
+    const showHandReactions = isDesktopDevice && buttons.main.showMyHandBtn && buttons.main.showRoomEmojiPickerBtn;
+    myHandSplit.classList.toggle('no-toggle', !showHandReactions);
 
     // Main buttons
     displayElements([
@@ -2254,13 +2246,17 @@ function handleButtonsRule() {
         }, // auto-detected
         { element: getId('voiceCommandsBtn'), display: buttons.main.showVoiceCommandsBtn && !!speechRecognition }, // auto-detected
         { element: roomEmojiPickerBtn, display: buttons.main.showRoomEmojiPickerBtn },
+        { element: myHandSplit, display: buttons.main.showMyHandBtn, mode: 'inline-flex' },
         { element: myHandBtn, display: buttons.main.showMyHandBtn },
+        // Desktop only: on mobile the chevron is too small to tap and the picker covers the screen
+        { element: myHandReactionsBtn, display: showHandReactions, mode: 'inline-flex' },
         { element: whiteboardBtn, display: buttons.main.showWhiteboardBtn },
         { element: editorBtn, display: buttons.main.showEditorBtn && RoomEditor.isSupported() },
         { element: pollBtn, display: buttons.main.showPollBtn },
         { element: breakoutBtn, display: isBreakoutBtnVisible() },
         { element: snapshotRoomBtn, display: buttons.main.showSnapshotRoomBtn && !isMobileDevice },
         { element: fileShareBtn, display: buttons.main.showFileShareBtn },
+        { element: shareMediaBtn, display: buttons.main.showShareMediaBtn },
         { element: documentPiPBtn, display: showDocumentPipBtn && buttons.main.showDocumentPipBtn },
         { element: mySettingsBtn, display: buttons.main.showMySettingsBtn },
         { element: aboutBtn, display: buttons.main.showAboutBtn },
@@ -7953,7 +7949,8 @@ function handleScreenCameraLayoutBtn(button) {
  */
 function adaptAspectRatio() {
     syncScreenCameraLayout();
-    const participantsCount = videoMediaContainer.childElementCount;
+    const tilesCount = videoMediaContainer.childElementCount;
+    const participantsCount = getParticipantTilesCount();
     if (peersCount) peersCount.innerText = participantsCount;
     updateLeaveRoomTooltip(participantsCount);
     let desktop,
@@ -7974,7 +7971,7 @@ function adaptAspectRatio() {
     }
 
     // desktop aspect ratio
-    switch (participantsCount) {
+    switch (tilesCount) {
         // case 1:
         //     desktop = 0; // (0:0)
         //     break;
@@ -7999,7 +7996,7 @@ function adaptAspectRatio() {
             desktop = 0; // (0:0)
     }
     // mobile aspect ratio
-    switch (participantsCount) {
+    switch (tilesCount) {
         case 3:
         case 9:
         case 10:
@@ -8020,11 +8017,20 @@ function adaptAspectRatio() {
         default:
             mobile = 3; // (1:1)
     }
-    if (participantsCount > 11) {
+    if (tilesCount > 11) {
         desktop = 1; // (4:3)
         mobile = 3; // (1:1)
     }
     setAspectRatio(isMobileDevice ? mobile : desktop);
+}
+
+/**
+ * Participants tiles in the grid, without the shared media tile
+ * @returns {integer} count
+ */
+function getParticipantTilesCount() {
+    const shareTile = getId('__shareVideo');
+    return videoMediaContainer.childElementCount - (shareTile?.parentNode === videoMediaContainer ? 1 : 0);
 }
 
 /**
@@ -9370,11 +9376,13 @@ function setChatRoomBtn() {
     });
 
     // open Video Url Player
-    msgerVideoUrlBtn.addEventListener('click', (e) => {
+    const openVideoUrlShare = () => {
         const shareTarget = getConversationShareTarget('video or audio');
         if (!shareTarget) return;
         sendVideoUrl(shareTarget.videoPeerId, shareTarget.peerName, shareTarget.broadcast);
-    });
+    };
+    msgerVideoUrlBtn.addEventListener('click', openVideoUrlShare);
+    shareMediaBtn.addEventListener('click', openVideoUrlShare);
 
     // Execute a function when the user releases a key on the keyboard
     msgerInput.addEventListener('keyup', (e) => {
@@ -9976,6 +9984,9 @@ function setRoomEmojiButton() {
     roomEmojiPickerBtn.addEventListener('click', (e) => {
         toggleEmojiPicker();
     });
+    myHandReactionsBtn.addEventListener('click', (e) => {
+        toggleEmojiPicker();
+    });
     closeBtn.addEventListener('click', (e) => {
         toggleEmojiPicker();
     });
@@ -10000,6 +10011,8 @@ function setRoomEmojiButton() {
         emojiPickerContainer.style.display = isOpen ? 'block' : 'none';
         roomEmojiPickerBtn.classList.toggle('is-active', isOpen);
         roomEmojiPickerBtn.setAttribute('aria-pressed', String(isOpen));
+        myHandReactionsBtn.classList.toggle('is-active', isOpen);
+        myHandReactionsBtn.setAttribute('aria-pressed', String(isOpen));
         setColor(roomEmojiPickerIcon, isOpen ? '#ffd600' : 'var(--btn-bar-bg-color)');
     }
 }
@@ -10220,7 +10233,18 @@ function setChatTranslateOpen(isOpen) {
     isChatTranslateVisible = isOpen;
     msgerTranslatePicker.classList.toggle('show', isOpen);
     msgerTranslateBtn.setAttribute('aria-expanded', String(isOpen));
+    syncChatTranslateBtn();
     if (isOpen) msgerTranslatePicker.querySelector('.chat-translate-item.active')?.scrollIntoView({ block: 'nearest' });
+}
+
+/**
+ * Color the translate button like the other chat buttons: yellow while the picker is open (Emoji/GIF),
+ * lime while a language is set (Markdown on)
+ */
+function syncChatTranslateBtn() {
+    if (!msgerTranslateBtn) return;
+    msgerTranslateBtn.classList.toggle('active', !!chatTranslateLang);
+    setColor(msgerTranslateBtn, isChatTranslateVisible ? '#FFFF00' : chatTranslateLang ? 'lime' : '#FFFFFF');
 }
 
 /**
@@ -10229,7 +10253,7 @@ function setChatTranslateOpen(isOpen) {
  */
 function selectChatTranslateLang(code) {
     chatTranslateLang = code || '';
-    msgerTranslateBtn?.classList.toggle('active', !!chatTranslateLang);
+    syncChatTranslateBtn();
     if (msgerTranslateBadge) msgerTranslateBadge.textContent = chatTranslateLang.split('-')[0].toUpperCase();
     msgerTranslateList?.querySelectorAll('.chat-translate-item').forEach((item) => {
         item.classList.toggle('active', (item.dataset.lang || '') === chatTranslateLang);
@@ -11341,7 +11365,7 @@ async function documentPictureInPictureOpen() {
                 console.log('DOCUMENT PIP found video id -----> ' + video.id);
 
                 // No video stream detected or is video share from URL...
-                if (!video.srcObject || video.id === 'videoAudioUrlElement') return;
+                if (!video.srcObject || video.id === '__videoShare') return;
 
                 // Skip hidden helper videos (background effects / auto framing sources) that have no id
                 if (!video.id || video.getAttribute('aria-hidden') === 'true') return;
@@ -12376,30 +12400,6 @@ function loadSettingsFromLocalStorage() {
  */
 function getSelectedIndexValue(elem) {
     return elem.options[elem.selectedIndex].value;
-}
-
-/**
- * Make video Url player draggable
- */
-function setupVideoUrlPlayer() {
-    if (isMobileDevice) {
-        // adapt video player iframe for mobile
-        setSP('--iframe-width', '320px');
-        setSP('--iframe-height', '240px');
-    } else {
-        dragElement(videoUrlCont, videoUrlHeader);
-        dragElement(videoAudioUrlCont, videoAudioUrlHeader);
-    }
-    videoUrlCloseBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        closeVideoUrlPlayer();
-        emitVideoPlayer('close');
-    });
-    videoAudioCloseBtn.addEventListener('click', (e) => {
-        e.preventDefault();
-        closeVideoUrlPlayer();
-        emitVideoPlayer('close');
-    });
 }
 
 /**
@@ -22133,121 +22133,266 @@ function sendVideoUrl(peer_id = null, peer_name = '', broadcast = !peer_id) {
 }
 
 /**
- * Open video url Player
+ * Open video url Player as a tile in the video grid (pinnable like the participants tiles)
+ * @param {object} config data
+ * @param {boolean} isRemote opened by a peer's share
  */
-function openVideoUrlPlayer(config) {
+function openVideoUrlPlayer(config, isRemote = false) {
     console.log('Open video Player', config);
     const videoSrc = config.video_src;
     const videoType = getVideoType(videoSrc);
     const isAudioShare = videoType === 'audio/mpeg';
     const videoEmbed = getYoutubeEmbed(videoSrc);
     console.log('Video embed', videoEmbed);
-    let videoAudioUrlPosterElement = getId('videoAudioUrlPosterElement');
-    if (!videoAudioUrlPosterElement) {
-        videoAudioUrlPosterElement = document.createElement('img');
-        videoAudioUrlPosterElement.id = 'videoAudioUrlPosterElement';
-        videoAudioUrlPosterElement.alt = 'Shared audio';
-        videoAudioUrlPosterElement.style.width = '100%';
-        videoAudioUrlPosterElement.style.height = '100%';
-        videoAudioUrlElement.parentNode.insertBefore(videoAudioUrlPosterElement, videoAudioUrlElement);
+    if (!isVideoUrlPlayerOpen) playSound('newMessage');
+    resetVideoUrlPlayerSync();
+    removeVideoUrlPlayerTile();
+    const media = createVideoUrlPlayerTile(videoEmbed, videoSrc, videoType, isAudioShare);
+    isVideoUrlPlayerOpen = true;
+    if (!videoEmbed) {
+        initVideoUrlPlayerSync(config, media);
+        tryPlaySharedMedia(media, isRemote);
     }
-    let audioUrlElement = getId('videoAudioUrlAudioElement');
-    if (!audioUrlElement) {
-        audioUrlElement = document.createElement('audio');
-        audioUrlElement.id = 'videoAudioUrlAudioElement';
-        audioUrlElement.controls = true;
-        audioUrlElement.autoplay = true;
-        audioUrlElement.preload = 'metadata';
-        videoAudioUrlElement.parentNode.appendChild(audioUrlElement);
-    }
-    const tryPlaySharedMedia = (mediaElement) => {
-        const tryPlay = mediaElement.play?.();
-        if (tryPlay && typeof tryPlay.catch === 'function') {
-            tryPlay.catch((err) => {
-                console.warn('[openVideoUrlPlayer] Media autoplay blocked, waiting for user interaction', err);
-                Swal.fire({
-                    allowOutsideClick: false,
-                    allowEscapeKey: false,
-                    background: swalBackground,
-                    position: 'center',
-                    imageUrl: images.share,
-                    title: 'Play shared media',
-                    text: 'Autoplay is blocked on this device/browser. Tap Play to start the shared audio/video.',
-                    confirmButtonText: 'Play',
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        mediaElement.play().catch((playErr) => {
-                            console.warn('[openVideoUrlPlayer] User-triggered media play failed', playErr);
-                        });
-                    }
-                });
-            });
-        }
-    };
-    //
-    if (!isVideoUrlPlayerOpen) {
-        if (videoEmbed) {
-            playSound('newMessage');
-            console.log('Load element type: iframe');
-            videoUrlIframe.src = videoEmbed;
-            elemDisplay(videoUrlCont, true, 'flex');
-            isVideoUrlPlayerOpen = true;
-        } else {
-            playSound('newMessage');
-            console.log('Load element type: Video');
-            elemDisplay(videoAudioUrlCont, true, 'flex');
-            if (isAudioShare) {
-                videoAudioUrlElement.pause();
-                videoAudioUrlElement.removeAttribute('src');
-                videoAudioUrlElement.load();
-                elemDisplay(videoAudioUrlElement, false);
-                audioUrlElement.setAttribute('src', videoSrc);
-                audioUrlElement.type = videoType;
-                elemDisplay(audioUrlElement, true);
-                videoAudioUrlPosterElement.src = images.audioGif;
-                elemDisplay(videoAudioUrlPosterElement, true);
-                tryPlaySharedMedia(audioUrlElement);
-            } else {
-                audioUrlElement.pause();
-                audioUrlElement.removeAttribute('src');
-                audioUrlElement.load();
-                elemDisplay(audioUrlElement, false);
-                elemDisplay(videoAudioUrlPosterElement, false);
-                elemDisplay(videoAudioUrlElement, true);
-                videoAudioUrlElement.setAttribute('src', videoSrc);
-                videoAudioUrlElement.type = videoType;
-                tryPlaySharedMedia(videoAudioUrlElement);
-            }
-            isVideoUrlPlayerOpen = true;
-        }
+}
+
+/**
+ * Create the shared media tile: YouTube iframe or <video> (audio files too, with the poster)
+ * @param {string|boolean} videoEmbed YouTube embed url
+ * @param {string} videoSrc media url
+ * @param {string} videoType media type
+ * @param {boolean} isAudioShare shared media is an audio file
+ * @returns {HTMLElement} media element
+ */
+function createVideoUrlPlayerTile(videoEmbed, videoSrc, videoType, isAudioShare) {
+    const tile = document.createElement('div');
+    const navBar = document.createElement('div');
+    const pinBtn = document.createElement('button');
+    const fsBtn = document.createElement('button');
+    const closeBtn = document.createElement('button');
+    let media;
+
+    tile.id = '__shareVideo';
+    tile.className = 'Camera';
+    tile.style.display = isHideALLVideosActive ? 'none' : 'block';
+    navBar.className = 'navbar fadein';
+    pinBtn.id = '__videoShare_pinUnpin';
+    pinBtn.className = className.pinUnpin;
+    fsBtn.id = '__videoShare_fullScreen';
+    fsBtn.className = className.fullScreen;
+    closeBtn.id = '__videoShare_close';
+    closeBtn.className = 'fas fa-times';
+    closeBtn.setAttribute('aria-label', 'Close the video player');
+
+    if (videoEmbed) {
+        media = document.createElement('iframe');
+        media.setAttribute('title', 'Video Url Player');
+        media.setAttribute('frameborder', '0');
+        media.setAttribute(
+            'allow',
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
+        );
+        media.setAttribute('allowfullscreen', 'true');
+        media.src = videoEmbed;
     } else {
-        // video player seems open
-        if (videoEmbed) {
-            videoUrlIframe.src = videoEmbed;
-        } else {
-            if (isAudioShare) {
-                videoAudioUrlElement.pause();
-                videoAudioUrlElement.removeAttribute('src');
-                videoAudioUrlElement.load();
-                elemDisplay(videoAudioUrlElement, false);
-                audioUrlElement.setAttribute('src', videoSrc);
-                audioUrlElement.type = videoType;
-                elemDisplay(audioUrlElement, true);
-                videoAudioUrlPosterElement.src = images.audioGif;
-                elemDisplay(videoAudioUrlPosterElement, true);
-                tryPlaySharedMedia(audioUrlElement);
-            } else {
-                audioUrlElement.pause();
-                audioUrlElement.removeAttribute('src');
-                audioUrlElement.load();
-                elemDisplay(audioUrlElement, false);
-                elemDisplay(videoAudioUrlPosterElement, false);
-                elemDisplay(videoAudioUrlElement, true);
-                videoAudioUrlElement.src = videoSrc;
-                videoAudioUrlElement.type = videoType;
-                tryPlaySharedMedia(videoAudioUrlElement);
-            }
+        media = document.createElement('video');
+        media.type = videoType;
+        media.controls = true;
+        media.autoplay = true;
+        media.playsInline = true;
+        media.setAttribute('playsinline', 'true');
+        if (isAudioShare) {
+            media.preload = 'metadata';
+            media.setAttribute('poster', images.audioGif);
+            media.setAttribute('aria-label', 'Shared audio');
+            // WebKit (Safari/iOS) hides the poster once audio-only playback starts, the background keeps the gif visible
+            media.style.background = `#000 url('${images.audioGif}') center / contain no-repeat`;
         }
+        media.src = videoSrc;
+    }
+    media.id = '__videoShare';
+
+    !isMobileDevice && navBar.appendChild(pinBtn);
+    !isAudioShare && isVideoFullScreenSupported && navBar.appendChild(fsBtn);
+    navBar.appendChild(closeBtn);
+    tile.appendChild(navBar);
+    tile.appendChild(media);
+    videoMediaContainer.appendChild(tile);
+
+    closeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        closeVideoUrlPlayer();
+        emitVideoPlayer('close');
+    });
+    fsBtn.addEventListener('click', () => toggleVideoUrlPlayerFullScreen(tile));
+    handleVideoPinUnpin(media.id, pinBtn.id, tile.id, media.id);
+
+    if (!isMobileDevice) {
+        setTippy(pinBtn, 'Pin Video', 'bottom');
+        setTippy(fsBtn, 'Full Screen', 'bottom');
+        setTippy(closeBtn, 'Close the video player', 'bottom');
+    }
+    adaptAspectRatio();
+    return media;
+}
+
+/**
+ * Toggle full screen on the shared media tile
+ * @param {HTMLElement} tile shared media tile
+ */
+function toggleVideoUrlPlayerFullScreen(tile) {
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl === tile) {
+        (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+        return;
+    }
+    const request = tile.requestFullscreen || tile.webkitRequestFullscreen;
+    request?.call(tile)?.catch?.((err) => console.warn('[videoUrlPlayer] Full screen failed', err));
+}
+
+/**
+ * Stop the shared media and remove its tile (unpinning it first if needed)
+ */
+function removeVideoUrlPlayerTile() {
+    const tile = getId('__shareVideo');
+    if (!tile) return;
+    const media = getId('__videoShare');
+    if (media && media.tagName === 'VIDEO') {
+        media.pause();
+        media.removeAttribute('src');
+        media.load();
+    }
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (fsEl === tile) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    removeVideoPinMediaContainer('__videoShare');
+    tile.remove();
+    adaptAspectRatio();
+}
+
+/**
+ * Start the shared media, asking for a tap when autoplay is blocked
+ * @param {HTMLVideoElement} video shared media element
+ * @param {boolean} isRemote opened by a peer's share
+ */
+function tryPlaySharedMedia(video, isRemote) {
+    const tryPlay = video.play?.();
+    if (!tryPlay || typeof tryPlay.catch !== 'function') return;
+    tryPlay.catch((err) => {
+        console.warn('[openVideoUrlPlayer] Media autoplay blocked, waiting for user interaction', err);
+        Swal.fire({
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            background: swBg,
+            position: 'center',
+            imageUrl: images.share,
+            title: 'Play shared media',
+            text: 'Autoplay is blocked on this device/browser. Tap Play to start the shared audio/video.',
+            confirmButtonText: 'Play',
+        }).then((result) => {
+            if (!result.isConfirmed || videoUrlPlayerSync?.video !== video) return;
+            // Join where the others are now, so this late play doesn't rewind everyone
+            const expected = isRemote ? getVideoUrlPlayerExpectedState() : null;
+            if (expected && Math.abs(video.currentTime - expected.time) > 1) {
+                video.currentTime = expected.time;
+            }
+            if (expected?.paused) return;
+            video.play().catch((playErr) => {
+                console.warn('[openVideoUrlPlayer] User-triggered media play failed', playErr);
+            });
+        });
+    });
+}
+
+/**
+ * Shared media playback sync: play/pause/seek on any player is mirrored to the share audience.
+ * The sharer syncs to its audience, a private share's receiver syncs back to the sharer (the server sets peer_id = sender).
+ * `expected` is the last known shared state, used to skip events caused by applying a remote sync.
+ * @param {object} config data
+ * @param {HTMLVideoElement} video shared media element
+ */
+function initVideoUrlPlayerSync(config, video) {
+    const broadcast = !!config.broadcast;
+    videoUrlPlayerSync = {
+        video: video,
+        peer_id: broadcast ? null : config.peer_id,
+        broadcast: broadcast,
+        expected: { paused: false, time: 0, at: Date.now() },
+        timer: null,
+    };
+    ['play', 'pause', 'seeked'].forEach((event) =>
+        video.addEventListener(event, () => scheduleVideoUrlPlayerSync(video))
+    );
+}
+
+/**
+ * Stop syncing the shared media playback
+ */
+function resetVideoUrlPlayerSync() {
+    if (videoUrlPlayerSync) clearTimeout(videoUrlPlayerSync.timer);
+    videoUrlPlayerSync = null;
+}
+
+/**
+ * Get the shared playback state expected now
+ * @returns {object|null} { paused, time }
+ */
+function getVideoUrlPlayerExpectedState() {
+    const expected = videoUrlPlayerSync?.expected;
+    if (!expected) return null;
+    const elapsed = expected.paused ? 0 : (Date.now() - expected.at) / 1000;
+    return { paused: expected.paused, time: expected.time + elapsed };
+}
+
+/**
+ * Debounce local play/pause/seek events before syncing them
+ * @param {HTMLVideoElement} video shared media element
+ */
+function scheduleVideoUrlPlayerSync(video) {
+    const sync = videoUrlPlayerSync;
+    if (!sync || sync.video !== video) return;
+    clearTimeout(sync.timer);
+    sync.timer = setTimeout(emitVideoPlayerSync, 250);
+}
+
+/**
+ * Send the local playback state to the share audience
+ */
+function emitVideoPlayerSync() {
+    const sync = videoUrlPlayerSync;
+    if (!sync || !sync.video.isConnected) return;
+    const paused = sync.video.paused;
+    const time = sync.video.currentTime;
+    if (!Number.isFinite(time)) return;
+    const expected = getVideoUrlPlayerExpectedState();
+    if (expected && expected.paused === paused && Math.abs(expected.time - time) < 1) return;
+    sync.expected = { paused, time, at: Date.now() };
+    sendToServer('videoPlayer', {
+        room_id: roomId,
+        peer_name: myPeerName,
+        video_action: 'sync',
+        peer_id: sync.peer_id,
+        broadcast: sync.broadcast,
+        paused: paused,
+        time: time,
+    });
+}
+
+/**
+ * Apply a peer's play/pause/seek to the local player
+ * @param {object} config data
+ */
+function applyVideoPlayerSync(config) {
+    const sync = videoUrlPlayerSync;
+    if (!sync || !sync.video.isConnected) return;
+    const video = sync.video;
+    const time = Number(config.time);
+    if (!Number.isFinite(time) || time < 0) return;
+    const paused = config.paused === true;
+    sync.expected = { paused, time, at: Date.now() };
+    if (Math.abs(video.currentTime - time) > 0.5) video.currentTime = time;
+    if (paused) {
+        if (!video.paused) video.pause();
+    } else if (video.paused) {
+        video.play().catch((err) => console.warn('[videoPlayerSync] Remote play blocked', err));
     }
 }
 
@@ -22296,27 +22441,9 @@ function getYoutubeEmbed(url) {
  * Close Video Url Player
  */
 function closeVideoUrlPlayer() {
-    console.log('Close video Player', {
-        videoUrlIframe: videoUrlIframe.src,
-        videoAudioUrlElement: videoAudioUrlElement.src,
-    });
-    const audioUrlElement = getId('videoAudioUrlAudioElement');
-    const videoAudioUrlPosterElement = getId('videoAudioUrlPosterElement');
-    if (videoUrlIframe.src != '') videoUrlIframe.setAttribute('src', '');
-    if (videoAudioUrlElement.src != '') {
-        videoAudioUrlElement.setAttribute('src', '');
-        videoAudioUrlElement.load();
-    }
-    if (audioUrlElement?.src) {
-        audioUrlElement.pause();
-        audioUrlElement.setAttribute('src', '');
-        audioUrlElement.load();
-        elemDisplay(audioUrlElement, false);
-    }
-    if (videoAudioUrlPosterElement) elemDisplay(videoAudioUrlPosterElement, false);
-    elemDisplay(videoAudioUrlElement, true);
-    elemDisplay(videoUrlCont, false);
-    elemDisplay(videoAudioUrlCont, false);
+    console.log('Close video Player', { src: getId('__videoShare')?.src });
+    resetVideoUrlPlayerSync();
+    removeVideoUrlPlayerTile();
     isVideoUrlPlayerOpen = false;
 }
 
@@ -22346,7 +22473,7 @@ function handleVideoPlayer(config) {
     switch (video_action) {
         case 'open':
             userLog('toast', `${icons.user} ${peer_name} \n open video player`);
-            openVideoUrlPlayer(config);
+            openVideoUrlPlayer(config, true);
             appendMessage(
                 peer_name,
                 leftChatAvatar,
@@ -22360,6 +22487,9 @@ function handleVideoPlayer(config) {
         case 'close':
             userLog('toast', `${icons.user} ${peer_name} \n close video player`);
             closeVideoUrlPlayer();
+            break;
+        case 'sync':
+            applyVideoPlayerSync(config);
             break;
         default:
             break;
@@ -22564,7 +22694,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.3.57',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.3.62',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
