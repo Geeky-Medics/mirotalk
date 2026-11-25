@@ -380,16 +380,31 @@
                     aria-label="Raise hand"
                     aria-pressed="false"
                 ></button>
-                <button
-                    id="myHandReactionsBtn"
-                    class="device-dropdown-toggle"
-                    type="button"
-                    aria-label="Room Reactions"
-                    aria-pressed="false"
-                    style="display: none"
-                >
-                    <i class="fas fa-chevron-up" aria-hidden="true"></i>
-                </button>
+                <div id="myHandReactionsDropdown" class="dropdown dropup" style="display: none">
+                    <button
+                        id="myHandReactionsBtn"
+                        class="dropdown-toggle device-dropdown-toggle"
+                        type="button"
+                        aria-expanded="false"
+                        aria-label="Room Reactions"
+                    >
+                        <i class="fas fa-chevron-up" aria-hidden="true"></i>
+                    </button>
+                    <div
+                        id="myHandReactionsMenu"
+                        class="dropdown-menu text-start app-dropdown-menu"
+                        aria-labelledby="myHandReactionsBtn"
+                    >
+                        <button
+                            id="myHandRoomReactionsBtn"
+                            class="app-dropdown-action"
+                            type="button"
+                            aria-pressed="false"
+                        >
+                            <i class="fas fa-face-smile" aria-hidden="true"></i> Room Reactions
+                        </button>
+                    </div>
+                </div>
             </div>
             <button
                 id="chatRoomBtn"
@@ -453,33 +468,33 @@
                     aria-labelledby="participantViewButton"
                 >
                     <button type="button" data-participant-view="grid">
-                        <i class="fa-solid fa-border-all"></i> Grid
+                        <i class="pv-icon pv-icon-grid" aria-hidden="true"></i> Grid
                     </button>
                     <button type="button" data-participant-view="speaker-top">
-                        <i class="fa-solid fa-window-maximize"></i> Speaker top
+                        <i class="pv-icon pv-icon-speaker-top" aria-hidden="true"></i> Speaker top
                     </button>
                     <button type="button" data-participant-view="speaker-bottom">
-                        <i class="fa-solid fa-window-minimize"></i> Speaker bottom
+                        <i class="pv-icon pv-icon-speaker-bottom" aria-hidden="true"></i> Speaker bottom
                     </button>
                     <button type="button" data-participant-view="speaker-left">
-                        <i class="fa-solid fa-table-columns"></i> Speaker left
+                        <i class="pv-icon pv-icon-speaker-left" aria-hidden="true"></i> Speaker left
                     </button>
                     <button type="button" data-participant-view="speaker-right">
-                        <i class="fa-solid fa-table-columns"></i> Speaker right
+                        <i class="pv-icon pv-icon-speaker-right" aria-hidden="true"></i> Speaker right
                     </button>
                     <button type="button" data-participant-view="speaker-1:1">
-                        <i class="fa-solid fa-square"></i> Speaker 1:1
+                        <i class="pv-icon pv-icon-speaker-1-1" aria-hidden="true"></i> Speaker 1:1
                     </button>
                     <div class="participant-view-divider" role="separator"></div>
                     <p class="participant-view-section">Camera while screen sharing</p>
                     <button type="button" data-screen-cam-layout="separate">
-                        <i class="fa-solid fa-table-cells"></i> Separate tiles
+                        <i class="pv-icon pv-icon-separate" aria-hidden="true"></i> Separate tiles
                     </button>
                     <button type="button" data-screen-cam-layout="pip">
-                        <i class="fa-solid fa-clone"></i> Picture in Picture
+                        <i class="pv-icon pv-icon-pip" aria-hidden="true"></i> Picture in Picture
                     </button>
                     <button type="button" data-screen-cam-layout="split">
-                        <i class="fa-solid fa-table-columns"></i> Split screen
+                        <i class="pv-icon pv-icon-split" aria-hidden="true"></i> Split screen
                     </button>
                 </div>
             </div>
@@ -1211,6 +1226,20 @@
                                 <tr>
                                     <td class="w-80">
                                         <div class="title">
+                                            <i class="fas fa-user-check"></i>
+                                            <span class="settings-option-copy">
+                                                <strong>Highlight active speaker</strong>
+                                                <small>Show a border around whoever is talking</small>
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <input id="switchSpeakingHighlight" class="toggle" type="checkbox" checked />
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="w-80">
+                                        <div class="title">
                                             <i class="fas fa-music"></i>
                                             <span class="settings-option-copy">
                                                 <strong>Meeting sounds</strong>
@@ -1351,6 +1380,22 @@
                                             </p>
                                         </td>
                                         <td><input id="switchAutoFraming" class="toggle" type="checkbox" /></td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div id="gestureHandRaiseDiv" class="settings-field">
+                                <table id="mySettingsTable">
+                                    <tr>
+                                        <td class="w-80">
+                                            <div class="title">
+                                                <i class="fas fa-hand"></i>
+                                                <label for="switchGestureHandRaise">Raise hand by gesture</label>
+                                            </div>
+                                            <p class="settings-field-hint">
+                                                Hold up your open palm for 2 seconds to raise or lower your hand.
+                                            </p>
+                                        </td>
+                                        <td><input id="switchGestureHandRaise" class="toggle" type="checkbox" /></td>
                                     </tr>
                                 </table>
                             </div>
@@ -2111,25 +2156,31 @@
                                 <i class="fa-solid fa-table-cells-large"></i>
                                 <p>Participant view</p>
                             </div>
-                            <select id="participantViewMode">
-                                <option value="grid">Grid</option>
-                                <option value="speaker-top">Speaker top</option>
-                                <option value="speaker-bottom">Speaker bottom</option>
-                                <option value="speaker-left">Speaker left</option>
-                                <option value="speaker-right">Speaker right</option>
-                                <option value="speaker-1:1">Speaker 1:1</option>
-                            </select>
+                            <div class="select-with-icon">
+                                <i class="pv-icon select-value-icon" aria-hidden="true"></i>
+                                <select id="participantViewMode">
+                                    <option value="grid" data-icon="grid">Grid</option>
+                                    <option value="speaker-top" data-icon="speaker-top">Speaker top</option>
+                                    <option value="speaker-bottom" data-icon="speaker-bottom">Speaker bottom</option>
+                                    <option value="speaker-left" data-icon="speaker-left">Speaker left</option>
+                                    <option value="speaker-right" data-icon="speaker-right">Speaker right</option>
+                                    <option value="speaker-1:1" data-icon="speaker-1-1">Speaker 1:1</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="settings-field">
                             <div class="title">
                                 <i class="fa-solid fa-clone"></i>
                                 <p>Camera while screen sharing</p>
                             </div>
-                            <select id="screenCamLayoutSelect">
-                                <option value="separate">Separate tiles</option>
-                                <option value="pip">Picture in Picture</option>
-                                <option value="split">Split screen</option>
-                            </select>
+                            <div class="select-with-icon">
+                                <i class="pv-icon select-value-icon" aria-hidden="true"></i>
+                                <select id="screenCamLayoutSelect">
+                                    <option value="separate" data-icon="separate">Separate tiles</option>
+                                    <option value="pip" data-icon="pip">Picture in Picture</option>
+                                    <option value="split" data-icon="split">Split screen</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="settings-field">
                             <div class="title">
@@ -2159,13 +2210,16 @@
                                 <i class="fa-solid fa-map-pin"></i>
                                 <p>Pin video position</p>
                             </div>
-                            <select id="pinVideoPositionSelect">
-                                <option value="speaker-left">Left</option>
-                                <option value="speaker-top">Top</option>
-                                <option value="speaker-bottom">Bottom</option>
-                                <option value="speaker-right">Right</option>
-                                <option value="speaker-1:1">Full screen</option>
-                            </select>
+                            <div class="select-with-icon">
+                                <i class="pv-icon select-value-icon" aria-hidden="true"></i>
+                                <select id="pinVideoPositionSelect">
+                                    <option value="speaker-left" data-icon="speaker-left">Left</option>
+                                    <option value="speaker-top" data-icon="speaker-top">Top</option>
+                                    <option value="speaker-bottom" data-icon="speaker-bottom">Bottom</option>
+                                    <option value="speaker-right" data-icon="speaker-right">Right</option>
+                                    <option value="speaker-1:1" data-icon="speaker-1-1">Full screen</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
 
@@ -2910,6 +2964,9 @@
                         <strong data-template-text="participantName"></strong>
                         <small data-template-text="participantSubtitle"></small>
                     </span>
+                    <span class="msger-chat-speaking-bars" aria-hidden="true">
+                        <span></span><span></span><span></span><span></span>
+                    </span>
                     <span data-template-attr-id="badgeId" class="msger-chat-unread-badge hidden">0</span>
                     <div data-template-attr-id="dropdownMenuId" class="dropdown-menu-custom msger-participant-dropdown">
                         <button data-template-attr-id="dropdownToggleId" class="dropdown-toggle" type="button">
@@ -3098,6 +3155,7 @@ Note</textarea>
         <script defer src="../js/background-effects-compositor.js"></script>
         <script defer src="../js/background-effects-framer.js"></script>
         <script defer src="../js/background-effects.js"></script>
+        <script defer src="../js/handGesture.js"></script>
         <script defer src="../js/roomBackground.js"></script>
         <script defer src="../js/gifSearch.js"></script>
         <script defer src="../js/client.js"></script>

@@ -25,7 +25,9 @@ function extractConst(src, name) {
 }
 
 function setup(isMobile) {
-    const select = html.match(/<select id="participantViewMode"[\s\S]*?<\/select>/)[0];
+    const select = html.match(
+        /<div class="select-with-icon">\s*<i class="pv-icon select-value-icon"[^>]*><\/i>\s*<select id="participantViewMode"[\s\S]*?<\/select>\s*<\/div>/
+    )[0];
     const dom = new JSDOM(
         `${select}<select id="pinVideoPositionSelect"><option value="speaker-left"></option>
         <option value="speaker-top"></option><option value="speaker-bottom"></option><option value="speaker-1:1"></option></select>
@@ -40,6 +42,9 @@ function setup(isMobile) {
         var isVideoPinned = false;
         var pinnedVideoPinButtonId = null;
         var isApplyingParticipantViewMode = false;
+        var isPinSoundMuted = false;
+        var sounds = [];
+        var playSound = (name) => sounds.push(name);
         var lsSettings = {};
         var lS = { setSettings() {} };
         var pins = [];
@@ -54,14 +59,24 @@ function setup(isMobile) {
         var elemDisplay = (el, show, mode = 'flex') => { if (el) el.style.display = show ? mode : 'none'; };
         var resizeVideoMedia = () => {};
         var userLog = () => {};
-        var autoPinVideoForLayout = () => { isVideoPinned = true; return true; };
+        // Mimics the tile pin button click, which plays its own sound unless muted
+        var autoPinVideoForLayout = () => {
+            if (isVideoPinned) return true;
+            if (!isPinSoundMuted) playSound('click');
+            isVideoPinned = true;
+            return true;
+        };
         ${extractConst(clientSource, 'MOBILE_PARTICIPANT_VIEW_MODES')}
+        ${extractFunction(clientSource, 'updateSelectValueIcon')}
         ${extractFunction(clientSource, 'removeUnsupportedMobileParticipantViews')}
         ${extractFunction(clientSource, 'appendPinButton')}
         ${extractFunction(clientSource, 'toggleVideoPin')}
         ${extractFunction(clientSource, 'setParticipantViewMode')}
+        ${extractFunction(clientSource, 'applyParticipantViewMode')}
         window.api = {
             setParticipantViewMode,
+            sounds: () => sounds,
+            getPinSoundMuted: () => isPinSoundMuted,
             removeUnsupportedMobileParticipantViews,
             appendPinButton,
             toggleVideoPin,
@@ -107,6 +122,31 @@ describe('Participant view on mobile (P2P)', () => {
         api.setParticipantViewMode('speaker-left', false, false);
         assert.equal(select.value, 'speaker-left');
         assert.equal(select.options.length, 6);
+    });
+
+    it('plays one click sound for every user-selected view, including speaker-to-speaker switches', () => {
+        const { api } = setup(false);
+
+        api.setParticipantViewMode('speaker-left', false);
+        assert.equal(api.sounds().length, 1, 'the auto-pin click is silenced, not doubled');
+        api.setParticipantViewMode('speaker-right', false);
+        api.setParticipantViewMode('speaker-bottom', false);
+        assert.equal(api.sounds().length, 3);
+        assert.equal(api.getPinSoundMuted(), false);
+
+        api.setParticipantViewMode('speaker-top', false, false);
+        assert.equal(api.sounds().length, 3, 'programmatic changes stay silent');
+    });
+
+    it('shows the layout icon of the selected participant view in the settings select', () => {
+        const { api, select } = setup(false);
+        const icon = select.parentElement.querySelector('.select-value-icon');
+
+        api.setParticipantViewMode('speaker-1:1', false, false);
+        assert.equal(icon.className, 'pv-icon select-value-icon pv-icon-speaker-1-1');
+
+        api.setParticipantViewMode('unknown', false, false);
+        assert.equal(icon.className, 'pv-icon select-value-icon pv-icon-grid', 'falls back with the grid icon');
     });
 
     it('keeps a hidden pin button in the nav bar on mobile so layouts can pin tiles', () => {

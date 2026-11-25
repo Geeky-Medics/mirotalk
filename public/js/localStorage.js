@@ -28,6 +28,7 @@ class LocalStorage {
             screen_fps: 1, // default 30fps
             screen_quality: 0, // default native
             pitch_bar: true,
+            speaking_highlight: true, // border around the active speaker's tile
             sounds: true,
             keep_buttons_visible: true,
             keyboard_shortcuts: false,
@@ -43,6 +44,7 @@ class LocalStorage {
             peer_avatar: '', // persisted avatar URL
             camera_background: { mode: 'off', image: null }, // last camera background (custom upload lives in IndexedDB)
             camera_auto_framing: false, // keep me centered: crop the camera around the faces
+            gesture_hand_raise: false, // raise hand by holding up open palm for 2s
         };
 
         this.DEVICES_COUNT = {

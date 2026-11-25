@@ -15,7 +15,7 @@ http://patorjk.com/software/taag/#p=display&f=ANSI%20Regular&t=Client
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.3.65
+ * @version 2.3.72
  *
  */
 
@@ -105,6 +105,7 @@ const icons = {
     lock: '<i class="fas fa-lock"></i>',
     unlock: '<i class="fas fa-lock-open"></i>',
     pitchBar: '<i class="fas fa-microphone-lines"></i>',
+    speakingHighlight: '<i class="fas fa-user-check"></i>',
     sounds: '<i class="fas fa-music"></i>',
     share: '<i class="fas fa-share-alt"></i>',
     user: '<i class="fas fa-user"></i>',
@@ -241,7 +242,10 @@ const hideMeBtn = getId('hideMeBtn');
 const screenShareBtn = getId('screenShareBtn');
 const myHandBtn = getId('myHandBtn');
 const myHandSplit = getId('myHandSplit');
+const myHandReactionsDropdown = getId('myHandReactionsDropdown');
 const myHandReactionsBtn = getId('myHandReactionsBtn');
+const myHandReactionsMenu = getId('myHandReactionsMenu');
+const myHandRoomReactionsBtn = getId('myHandRoomReactionsBtn');
 const mySettingsBtn = getId('mySettingsBtn');
 const settingsSplit = getId('settingsSplit');
 const settingsExtraDropdown = getId('settingsExtraDropdown');
@@ -443,6 +447,7 @@ const switchKeepAwake = getId('switchKeepAwake');
 
 const switchPushToTalk = getId('switchPushToTalk');
 const switchAudioPitchBar = getId('switchAudioPitchBar');
+const switchSpeakingHighlight = getId('switchSpeakingHighlight');
 const audioInputSelect = getId('audioSource');
 const audioOutputSelect = getId('audioOutput');
 const audioOutputDiv = getId('audioOutputDiv');
@@ -470,6 +475,10 @@ const initBackgroundPickerCloseBtn = getId('initBackgroundPickerCloseBtn');
 const autoFramingDiv = getId('autoFramingDiv');
 const switchAutoFraming = getId('switchAutoFraming');
 const initAutoFramingBtn = getId('initAutoFramingBtn');
+const gestureHandRaiseDiv = getId('gestureHandRaiseDiv');
+const switchGestureHandRaise = getId('switchGestureHandRaise');
+let gestureHandRaiseEnabled = false;
+let handGestureManager = null;
 let cameraEffects = null;
 let cameraAutoFraming = false; // keep me centered: crops the camera around the faces (with or without a background)
 let backgroundImage = null; // decoded <img>, or a hidden looping <video> for video backgrounds
@@ -864,6 +873,7 @@ let myAudioStatusIcon;
 let isVideoPrivacyActive = false; // Video circle for privacy
 let isVideoPinned = false;
 let isApplyingParticipantViewMode = false;
+let isPinSoundMuted = false;
 let pinnedVideoPinButtonId = null;
 let restorePinnedVideoToGrid = null;
 let participantViewRestoreTimer = null;
@@ -943,6 +953,9 @@ let isWaitingInLobby = false;
 let roomLobby = null;
 let isKeepButtonsVisible = false;
 let isAudioPitchBar = true;
+let isSpeakingHighlight = true;
+const speakingTileTimers = new Map();
+const speakingParticipantTimers = new Map();
 let isPushToTalkActive = false;
 let isPushToTalkPressed = false;
 let pushToTalkAudioContext = null;
@@ -1204,7 +1217,6 @@ function refreshMainButtonsToolTipPlacement() {
     setTippy(videoBtn, useVideo ? 'Stop the video (V)' : 'My video is disabled', bottomButtonsPlacement);
     setTippy(screenShareBtn, 'Start screen sharing (S)', bottomButtonsPlacement);
     setTippy(myHandBtn, 'Raise your hand (H)', bottomButtonsPlacement);
-    setTippy(myHandReactionsBtn, 'Room Reactions', bottomButtonsPlacement);
     setTippy(chatRoomBtn, 'Open the chat (C)', bottomButtonsPlacement);
     setTippy(participantsBtn, 'Show participants', bottomButtonsPlacement);
     setTippy(participantViewButton, 'Change participant view', bottomButtonsPlacement);
@@ -2249,7 +2261,7 @@ function handleButtonsRule() {
         { element: myHandSplit, display: buttons.main.showMyHandBtn, mode: 'inline-flex' },
         { element: myHandBtn, display: buttons.main.showMyHandBtn },
         // Desktop only: on mobile the chevron is too small to tap and the picker covers the screen
-        { element: myHandReactionsBtn, display: showHandReactions, mode: 'inline-flex' },
+        { element: myHandReactionsDropdown, display: showHandReactions, mode: 'inline-flex' },
         { element: whiteboardBtn, display: buttons.main.showWhiteboardBtn },
         { element: editorBtn, display: buttons.main.showEditorBtn && RoomEditor.isSupported() },
         { element: pollBtn, display: buttons.main.showPollBtn },
@@ -2939,6 +2951,14 @@ function setupBackgroundControls() {
     backgroundEffectsSection.hidden = !supported;
     initBackgroundEffectsSection.hidden = !supported || !useVideo || !buttons.main.showVideoBtn;
     autoFramingDiv.hidden = !isAutoFramingAvailable();
+    if (typeof gestureHandRaiseDiv !== 'undefined' && gestureHandRaiseDiv) {
+        gestureHandRaiseDiv.hidden = !useVideo || !buttons.main.showVideoBtn;
+    }
+    if (typeof switchGestureHandRaise !== 'undefined' && switchGestureHandRaise) {
+        gestureHandRaiseEnabled = Boolean(typeof lsSettings !== 'undefined' && lsSettings?.gesture_hand_raise);
+        switchGestureHandRaise.checked = gestureHandRaiseEnabled;
+        switchGestureHandRaise.onchange = () => setGestureHandRaise(switchGestureHandRaise.checked);
+    }
     switchAutoFraming.onchange = () => setCameraAutoFraming(switchAutoFraming.checked);
     initAutoFramingBtn.onclick = () => setCameraAutoFraming(!cameraAutoFraming);
     backgroundEffectSelect.onchange = changeCameraBackground;
@@ -3200,6 +3220,110 @@ async function handleAutoFramingError(effects, error) {
     } catch (err) {
         console.error('Unable to restore camera after auto framing failed', err);
     }
+}
+
+/**
+ * Hand Gesture Detection (Open palm held for 2s triggers raise/lower hand)
+ */
+function createGestureHandProgress(parentWrap) {
+    if (!parentWrap || parentWrap.querySelector('.gesture-hand-progress')) return null;
+    const container = document.createElement('div');
+    container.className = 'gesture-hand-progress';
+    container.setAttribute('hidden', '');
+    container.setAttribute('aria-hidden', 'true');
+
+    const icon = document.createElement('div');
+    icon.className = 'gesture-hand-icon';
+    icon.innerText = '✋';
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'gesture-hand-svg');
+    svg.setAttribute('viewBox', '0 0 36 36');
+
+    const bgCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    bgCircle.setAttribute('class', 'gesture-hand-circle-bg');
+    bgCircle.setAttribute('cx', '18');
+    bgCircle.setAttribute('cy', '18');
+    bgCircle.setAttribute('r', '15.9155');
+
+    const fillCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    fillCircle.setAttribute('class', 'gesture-hand-circle-fill');
+    fillCircle.setAttribute('cx', '18');
+    fillCircle.setAttribute('cy', '18');
+    fillCircle.setAttribute('r', '15.9155');
+
+    svg.appendChild(bgCircle);
+    svg.appendChild(fillCircle);
+    container.appendChild(icon);
+    container.appendChild(svg);
+    parentWrap.appendChild(container);
+
+    return { container, fillCircle };
+}
+
+function setGestureHandRaise(enabled) {
+    gestureHandRaiseEnabled = Boolean(enabled);
+    if (typeof lsSettings !== 'undefined' && lsSettings) {
+        lsSettings.gesture_hand_raise = gestureHandRaiseEnabled;
+        lS.setSettings(lsSettings);
+    }
+    if (typeof switchGestureHandRaise !== 'undefined' && switchGestureHandRaise) {
+        switchGestureHandRaise.checked = gestureHandRaiseEnabled;
+    }
+    if (typeof syncGestureHandRaise === 'function') {
+        syncGestureHandRaise();
+    }
+}
+
+function syncGestureHandRaise() {
+    if (typeof HandGesture === 'undefined') return;
+    const isPreJoin = Boolean(typeof Swal !== 'undefined' && Swal.getPopup?.()?.contains(initUser));
+    const myVideoEl = getId('myVideo');
+    const myVideoWrapEl = getId('myVideoWrap');
+
+    if (!gestureHandRaiseEnabled) {
+        // Setting turned off: also free the worker and the model
+        handGestureManager?.dispose();
+        return;
+    }
+    if (!myVideoStatus || !myVideoEl || isPreJoin) {
+        if (handGestureManager) {
+            handGestureManager.stop();
+        }
+        return;
+    }
+
+    if (!handGestureManager) {
+        handGestureManager = new HandGesture.HandGestureManager();
+    }
+
+    let progressUI = myVideoWrapEl?.querySelector('.gesture-hand-progress');
+    let fillCircle = progressUI?.querySelector('.gesture-hand-circle-fill');
+    if (!progressUI && myVideoWrapEl) {
+        const created = createGestureHandProgress(myVideoWrapEl);
+        if (created) {
+            progressUI = created.container;
+            fillCircle = created.fillCircle;
+        }
+    }
+
+    handGestureManager.attachElements({
+        video: myVideoEl,
+        progressContainer: progressUI,
+        progressFill: fillCircle,
+        onTrigger: () => {
+            if (typeof Swal !== 'undefined' && Swal.getPopup?.()?.contains(initUser)) {
+                return;
+            }
+            if (isRulesActive && !isPresenter && !buttons.main.showMyHandBtn) {
+                toastMessage('warning', 'The presenter has disabled your ability to raise your hand');
+                return;
+            }
+            setMyHandStatus();
+        },
+    });
+
+    handGestureManager.start();
 }
 
 /**
@@ -4353,6 +4477,9 @@ async function whoAreYouJoin() {
     }
     if (useAudio && localAudioMediaStream) {
         getMicrophoneVolumeIndicator(localAudioMediaStream);
+    }
+    if (typeof syncGestureHandRaise === 'function') {
+        syncGestureHandRaise();
     }
 }
 
@@ -6532,6 +6659,7 @@ async function loadLocalMedia(stream, kind) {
             myVideoWrap.appendChild(myVideoPeerName);
 
             createVideoLoadingSpinner(myVideoWrap, myLocalMedia);
+            createGestureHandProgress(myVideoWrap);
 
             videoMediaContainer.appendChild(myVideoWrap);
             elemDisplay(myVideoWrap, false);
@@ -6539,6 +6667,7 @@ async function loadLocalMedia(stream, kind) {
             logStreamSettingsInfo('localVideoMediaStream', stream);
             attachMediaStream(myLocalMedia, stream);
             watchSettingsVideoPreview(myLocalMedia);
+            syncGestureHandRaise();
 
             adaptAspectRatio();
 
@@ -7888,6 +8017,7 @@ function syncScreenCameraLayout() {
  */
 function updateScreenCameraLayoutUI(mode) {
     if (screenCamLayoutSelect) screenCamLayoutSelect.value = mode;
+    updateSelectValueIcon(screenCamLayoutSelect);
     document.querySelectorAll('#participantViewMenu [data-screen-cam-layout]').forEach((button) => {
         const active = button.dataset.screenCamLayout === mode;
         button.classList.toggle('active', active);
@@ -8459,7 +8589,7 @@ function handleVideoPinUnpin(elemId, pnId, camId, peerId, isScreen = false) {
             setColor(btnPn, 'white');
         };
         btnPn.addEventListener('click', () => {
-            playSound('click');
+            if (!isPinSoundMuted) playSound('click');
             // Switch pin: move the currently pinned tile back to the grid and pin this one instead
             if (isVideoPinned && pinnedVideoPlayerId && pinnedVideoPlayerId !== videoPlayer.id) {
                 if (typeof restorePinnedVideoToGrid === 'function') restorePinnedVideoToGrid();
@@ -8588,6 +8718,17 @@ function refreshPinnedVideoLayout() {
 // Phones only get the stacked layouts: side-by-side views don't fit a portrait screen
 const MOBILE_PARTICIPANT_VIEW_MODES = ['grid', 'speaker-top', 'speaker-bottom', 'speaker-1:1'];
 
+/**
+ * Show the selected option's layout icon (option data-icon -> pv-icon-<name>) next to a .select-with-icon select
+ * @param {HTMLSelectElement} select
+ */
+function updateSelectValueIcon(select) {
+    const icon = select?.parentElement?.querySelector(':scope > .select-value-icon');
+    if (!icon) return;
+    const name = select.selectedOptions[0]?.dataset.icon;
+    icon.className = `pv-icon select-value-icon${name ? ` pv-icon-${name}` : ''}`;
+}
+
 function removeUnsupportedMobileParticipantViews() {
     participantViewMode.querySelectorAll('option').forEach((option) => {
         if (!MOBILE_PARTICIPANT_VIEW_MODES.includes(option.value)) option.remove();
@@ -8595,6 +8736,19 @@ function removeUnsupportedMobileParticipantViews() {
 }
 
 function setParticipantViewMode(requestedMode, persist = true, notify = true) {
+    // User-initiated change: play one click for every view, silencing the incidental pin/unpin clicks
+    if (!notify) return applyParticipantViewMode(requestedMode, persist, notify);
+    playSound('click');
+    const wasPinSoundMuted = isPinSoundMuted;
+    isPinSoundMuted = true;
+    try {
+        applyParticipantViewMode(requestedMode, persist, notify);
+    } finally {
+        isPinSoundMuted = wasPinSoundMuted;
+    }
+}
+
+function applyParticipantViewMode(requestedMode, persist, notify) {
     const legacyModes = { default: 'grid', vertical: 'speaker-left', horizontal: 'speaker-top', top: 'speaker-bottom' };
     const supportedModes = new Set([
         'grid',
@@ -8633,6 +8787,8 @@ function setParticipantViewMode(requestedMode, persist = true, notify = true) {
             }
         }
     }
+    updateSelectValueIcon(participantViewMode);
+    updateSelectValueIcon(pinVideoPositionSelect);
 
     if (persist) {
         lsSettings.participant_view = mode;
@@ -10016,7 +10172,8 @@ function setRoomEmojiButton() {
     roomEmojiPickerBtn.addEventListener('click', (e) => {
         toggleEmojiPicker();
     });
-    myHandReactionsBtn.addEventListener('click', (e) => {
+    setMyHandReactionsDropdown();
+    myHandRoomReactionsBtn.addEventListener('click', (e) => {
         toggleEmojiPicker();
     });
     closeBtn.addEventListener('click', (e) => {
@@ -10043,10 +10200,53 @@ function setRoomEmojiButton() {
         emojiPickerContainer.style.display = isOpen ? 'block' : 'none';
         roomEmojiPickerBtn.classList.toggle('is-active', isOpen);
         roomEmojiPickerBtn.setAttribute('aria-pressed', String(isOpen));
-        myHandReactionsBtn.classList.toggle('is-active', isOpen);
-        myHandReactionsBtn.setAttribute('aria-pressed', String(isOpen));
+        myHandRoomReactionsBtn.classList.toggle('is-active', isOpen);
+        myHandRoomReactionsBtn.setAttribute('aria-pressed', String(isOpen));
         setColor(roomEmojiPickerIcon, isOpen ? '#ffd600' : 'var(--btn-bar-bg-color)');
+        setColor(myHandRoomReactionsBtn.querySelector('i'), isOpen ? '#ffd600' : '');
     }
+}
+
+/**
+ * Raise Hand chevron: dropup with the Room Reactions entry, opened on hover or click like the other toolbar chevrons
+ */
+function setMyHandReactionsDropdown() {
+    let closeTimeout;
+    const openMenu = () => {
+        clearTimeout(closeTimeout);
+        myHandReactionsMenu.classList.add('show');
+        myHandReactionsBtn.setAttribute('aria-expanded', 'true');
+    };
+    const closeMenu = () => {
+        clearTimeout(closeTimeout);
+        myHandReactionsMenu.classList.remove('show');
+        myHandReactionsBtn.setAttribute('aria-expanded', 'false');
+    };
+    const scheduleClose = () => {
+        clearTimeout(closeTimeout);
+        closeTimeout = setTimeout(closeMenu, 180);
+    };
+
+    myHandReactionsBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        myHandReactionsMenu.classList.contains('show') ? closeMenu() : openMenu();
+    });
+
+    if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+        myHandReactionsBtn.addEventListener('mouseenter', openMenu);
+        myHandReactionsBtn.addEventListener('mouseleave', scheduleClose);
+        myHandReactionsMenu.addEventListener('mouseenter', openMenu);
+        myHandReactionsMenu.addEventListener('mouseleave', scheduleClose);
+    }
+
+    myHandReactionsMenu.addEventListener('click', closeMenu);
+    document.addEventListener('click', (e) => {
+        if (!myHandReactionsDropdown.contains(e.target)) closeMenu();
+    });
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeMenu();
+    });
 }
 
 /**
@@ -10060,7 +10260,7 @@ function setChatEmojiBtn() {
             hideShowEmojiPicker();
             return;
         }
-        // Mouse: hover already opens the picker, the click locks it open (click again to close)
+        // Mouse: hover already opens the picker, the click pins it against mouseleave (click again to close)
         if (isChatEmojiLocked) {
             hideChatEmojiPicker();
         } else {
@@ -10087,15 +10287,27 @@ function setChatEmojiBtn() {
             hideChatEmojiPicker();
         }
     });
+
+    const closeOnEscape = (e) => {
+        if (e.key !== 'Escape' || !isChatEmojiVisible) return;
+        e.stopPropagation();
+        hideChatEmojiPicker();
+        msgerEmojiBtn.focus();
+    };
+    msgerEmojiPicker.addEventListener('keydown', closeOnEscape);
+    msgerInput.addEventListener('keydown', closeOnEscape);
 }
 
 /**
- * Add emoji to chat message
+ * Add emoji to chat message: one pick closes the picker (Zoom/Teams style), Shift+click keeps it open to add several
+ * @param {object} data emoji-mart emoji data
+ * @param {Event} event click/keyboard event
  */
-function addEmojiToMsg(data) {
-    //console.log(data);
+function addEmojiToMsg(data, event) {
     msgerInput.value += data.native;
-    if (!isChatEmojiLocked) hideChatEmojiPicker();
+    if (event?.shiftKey) return;
+    hideChatEmojiPicker();
+    if (!isMobileDevice) msgerInput.focus();
 }
 
 /**
@@ -11638,6 +11850,21 @@ function setMySettingsBtn() {
         playSound('switch');
     });
 
+    switchSpeakingHighlight.addEventListener('change', (e) => {
+        isSpeakingHighlight = e.currentTarget.checked;
+        if (!isSpeakingHighlight) clearSpeakingTiles();
+        lsSettings.speaking_highlight = isSpeakingHighlight;
+        lS.setSettings(lsSettings);
+        userLog(
+            'switch',
+            `${icons.speakingHighlight} Active speaker highlight ` + (isSpeakingHighlight ? 'ON' : 'OFF'),
+            undefined,
+            undefined,
+            isSpeakingHighlight
+        );
+        playSound('switch');
+    });
+
     // make chat room draggable for desktop
     if (!isMobileDevice) dragElement(mySettings, mySettingsHeader);
 
@@ -12109,6 +12336,7 @@ function setupMySettings() {
         e.stopPropagation();
         const camLayoutButton = e.target.closest('[data-screen-cam-layout]');
         if (camLayoutButton) {
+            playSound('click');
             setScreenCameraLayout(camLayoutButton.dataset.screenCamLayout);
             return;
         }
@@ -12151,6 +12379,7 @@ function setupMySettings() {
         adaptAspectRatio();
     });
     screenCamLayoutSelect.addEventListener('change', () => {
+        playSound('click');
         setScreenCameraLayout(screenCamLayoutSelect.value);
     });
 
@@ -12405,6 +12634,7 @@ function loadSettingsFromLocalStorage() {
     notifyBySound = lsSettings.sounds;
     isKeepButtonsVisible = lsSettings.keep_buttons_visible;
     isAudioPitchBar = lsSettings.pitch_bar;
+    isSpeakingHighlight = lsSettings.speaking_highlight !== false;
     isShortcutsEnabled = lsSettings.keyboard_shortcuts;
     switchSounds.checked = notifyBySound;
     switchShare.checked = notify;
@@ -12412,6 +12642,7 @@ function loadSettingsFromLocalStorage() {
     syncKeepButtonsVisibleBtn();
     switchPinChatByDefault.checked = pinChatByDefault;
     switchAudioPitchBar.checked = isAudioPitchBar;
+    switchSpeakingHighlight.checked = isSpeakingHighlight;
     switchShortcuts.checked = isShortcutsEnabled;
     keepCustomTheme.checked = themeCustom.keep;
     themeSelect.disabled = themeCustom.keep;
@@ -18116,6 +18347,9 @@ function setMyAudioStatus(status, playStatusSound = true) {
  */
 function setMyVideoStatus(status) {
     syncWakeLockDebounced();
+    if (typeof syncGestureHandRaise === 'function') {
+        syncGestureHandRaise();
+    }
     console.log('My video status', status);
 
     // Camera-on tiles come first in the mobile pinned strip (see .pinned-strip in videoGrid.css)
@@ -22217,7 +22451,52 @@ function openVideoUrlPlayer(config, isRemote = false) {
 }
 
 /**
- * Create the shared media tile: YouTube iframe or <video> (audio files too, with the poster)
+ * Shared audio waveform layer. Chromium ignores clicks on an audio-only <video> and a GIF can't be paused,
+ * so clicking it toggles playback like a shared video, and while paused the GIF is swapped for a canvas
+ * snapshot of its current frame.
+ * @param {HTMLVideoElement} video shared audio element
+ * @returns {HTMLElement} waveform layer
+ */
+function createShareAudioVisual(video) {
+    const visual = document.createElement('div');
+    visual.className = 'shareAudioVisual';
+    const gif = document.createElement('img');
+    gif.src = images.audioGif;
+    gif.alt = '';
+    gif.draggable = false;
+    const frame = document.createElement('canvas');
+    visual.append(gif, frame);
+
+    let frozen = false;
+    const update = () => {
+        const playing = !video.paused && !video.ended;
+        if (playing) {
+            frozen = false;
+        } else if (!frozen && gif.complete && gif.naturalWidth) {
+            frame.width = gif.naturalWidth;
+            frame.height = gif.naturalHeight;
+            frame.getContext('2d').drawImage(gif, 0, 0);
+            frozen = true;
+        }
+        visual.classList.toggle('paused', frozen);
+    };
+    ['play', 'pause', 'ended'].forEach((event) => video.addEventListener(event, update));
+    gif.addEventListener('load', update);
+    update();
+
+    visual.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (video.paused || video.ended) {
+            video.play().catch((err) => console.warn('[shareAudioVisual] Play failed', err));
+        } else {
+            video.pause();
+        }
+    });
+    return visual;
+}
+
+/**
+ * Create the shared media tile: YouTube iframe or <video> (audio files too, with the waveform layer)
  * @param {string|boolean} videoEmbed YouTube embed url
  * @param {string} videoSrc media url
  * @param {string} videoType media type
@@ -22263,10 +22542,7 @@ function createVideoUrlPlayerTile(videoEmbed, videoSrc, videoType, isAudioShare)
         media.setAttribute('playsinline', 'true');
         if (isAudioShare) {
             media.preload = 'metadata';
-            media.setAttribute('poster', images.audioGif);
             media.setAttribute('aria-label', 'Shared audio');
-            // WebKit (Safari/iOS) hides the poster once audio-only playback starts, the background keeps the gif visible
-            media.style.background = `#000 url('${images.audioGif}') center / contain no-repeat`;
         }
         media.src = videoSrc;
     }
@@ -22277,6 +22553,7 @@ function createVideoUrlPlayerTile(videoEmbed, videoSrc, videoType, isAudioShare)
     navBar.appendChild(closeBtn);
     tile.appendChild(navBar);
     tile.appendChild(media);
+    if (isAudioShare) tile.appendChild(createShareAudioVisual(media));
     videoMediaContainer.appendChild(tile);
 
     closeBtn.addEventListener('click', (e) => {
@@ -22755,7 +23032,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.3.65',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.3.72',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
@@ -23039,6 +23316,9 @@ function handlePeerVolume(data) {
 
     const audioColorTmp = getVolumeColor(volume);
 
+    if (isSpeakingHighlight) handleSpeakingTile(peer_id + '_videoWrap');
+    handleSpeakingParticipant(peer_id);
+
     if (!isAudioPitchBar) {
         const remotePeerAvatarImg = getId(peer_id + '_avatar');
         if (remotePeerAvatarImg) {
@@ -23052,16 +23332,13 @@ function handlePeerVolume(data) {
     }
 
     const remotePitchBar = getId(peer_id + '_pitch_bar');
-    //let remoteVideoWrap = getId(peer_id + '_videoWrap');
     if (!remotePitchBar) return;
     remotePitchBar.style.backgroundColor = audioColorTmp;
     remotePitchBar.style.height = volume + '%';
-    //remoteVideoWrap.classList.toggle('speaking');
     clearTimeout(peerVolumeTimers[peer_id]);
     peerVolumeTimers[peer_id] = setTimeout(function () {
         remotePitchBar.style.backgroundColor = '#19bb5c';
         remotePitchBar.style.height = '0%';
-        //remoteVideoWrap.classList.toggle('speaking');
     }, 100);
 }
 
@@ -23076,6 +23353,8 @@ function handleMyVolume(data) {
 
     const audioColorTmp = getVolumeColor(volume);
 
+    if (isSpeakingHighlight) handleSpeakingTile('myVideoWrap');
+
     if (!isAudioPitchBar || !myPitchBar) {
         const localPeerAvatarImg = getId('myVideoAvatarImage');
         if (localPeerAvatarImg) {
@@ -23088,13 +23367,53 @@ function handleMyVolume(data) {
     }
     myPitchBar.style.backgroundColor = audioColorTmp;
     myPitchBar.style.height = volume + '%';
-    //myVideoWrap.classList.toggle('speaking');
     clearTimeout(myVolumeTimer);
     myVolumeTimer = setTimeout(function () {
         myPitchBar.style.backgroundColor = '#19bb5c';
         myPitchBar.style.height = '0%';
-        //myVideoWrap.classList.toggle('speaking');
     }, 100);
+}
+
+/**
+ * Show the speaking border on a camera tile (grid, pinned or screen-share overlay).
+ * Volume updates keep arriving while someone talks: hold the border briefly so short pauses don't flicker it.
+ * @param {string} tileId myVideoWrap or <peer_id>_videoWrap
+ * @param {number} holdMs
+ */
+function handleSpeakingTile(tileId, holdMs = 600) {
+    getId(tileId)?.classList.add('speaking');
+    clearTimeout(speakingTileTimers.get(tileId));
+    speakingTileTimers.set(
+        tileId,
+        setTimeout(() => {
+            getId(tileId)?.classList.remove('speaking');
+            speakingTileTimers.delete(tileId);
+        }, holdMs)
+    );
+}
+
+function clearSpeakingTiles() {
+    speakingTileTimers.forEach((timer) => clearTimeout(timer));
+    speakingTileTimers.clear();
+    document.querySelectorAll('.speaking').forEach((tile) => tile.classList.remove('speaking'));
+}
+
+/**
+ * Participants list: ring around the avatar and mixer bars while the peer speaks, held like the tile border.
+ * @param {string} peerId
+ * @param {number} holdMs
+ */
+function handleSpeakingParticipant(peerId, holdMs = 600) {
+    const itemId = peerId + '_pMsgBtn';
+    getId(itemId)?.classList.add('speaking');
+    clearTimeout(speakingParticipantTimers.get(itemId));
+    speakingParticipantTimers.set(
+        itemId,
+        setTimeout(() => {
+            getId(itemId)?.classList.remove('speaking');
+            speakingParticipantTimers.delete(itemId);
+        }, holdMs)
+    );
 }
 
 /**
