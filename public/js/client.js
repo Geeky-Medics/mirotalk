@@ -15,7 +15,7 @@ http://patorjk.com/software/taag/#p=display&f=ANSI%20Regular&t=Client
  * @link    Official Live demo: https://p2p.mirotalk.com
  * @license Open source: AGPLv3 | Commercial/closed source (official channel): https://docs.mirotalk.com/sites/p2p/
  * @author  Miroslav Pejic - miroslav.pejic.85@gmail.com
- * @version 2.3.72
+ * @version 2.3.75
  *
  */
 
@@ -246,6 +246,7 @@ const myHandReactionsDropdown = getId('myHandReactionsDropdown');
 const myHandReactionsBtn = getId('myHandReactionsBtn');
 const myHandReactionsMenu = getId('myHandReactionsMenu');
 const myHandRoomReactionsBtn = getId('myHandRoomReactionsBtn');
+const myHandGestureBtn = getId('myHandGestureBtn');
 const mySettingsBtn = getId('mySettingsBtn');
 const settingsSplit = getId('settingsSplit');
 const settingsExtraDropdown = getId('settingsExtraDropdown');
@@ -2234,7 +2235,9 @@ function handleButtonsRule() {
     // Camera/microphone stay visible when blocked/unavailable (shown as unavailable); only the config hides them
     const showAudio = buttons.main.showAudioBtn;
     const showVideo = buttons.main.showVideoBtn;
-    const showHandReactions = isDesktopDevice && buttons.main.showMyHandBtn && buttons.main.showRoomEmojiPickerBtn;
+    const showRoomReactions = buttons.main.showMyHandBtn && buttons.main.showRoomEmojiPickerBtn;
+    const showGestureHandRaise = isGestureHandRaiseAvailable();
+    const showHandReactions = isDesktopDevice && (showRoomReactions || showGestureHandRaise);
     myHandSplit.classList.toggle('no-toggle', !showHandReactions);
 
     // Main buttons
@@ -2262,6 +2265,8 @@ function handleButtonsRule() {
         { element: myHandBtn, display: buttons.main.showMyHandBtn },
         // Desktop only: on mobile the chevron is too small to tap and the picker covers the screen
         { element: myHandReactionsDropdown, display: showHandReactions, mode: 'inline-flex' },
+        { element: myHandRoomReactionsBtn, display: showRoomReactions, mode: 'flex' },
+        { element: myHandGestureBtn, display: showGestureHandRaise, mode: 'flex' },
         { element: whiteboardBtn, display: buttons.main.showWhiteboardBtn },
         { element: editorBtn, display: buttons.main.showEditorBtn && RoomEditor.isSupported() },
         { element: pollBtn, display: buttons.main.showPollBtn },
@@ -2956,7 +2961,7 @@ function setupBackgroundControls() {
     }
     if (typeof switchGestureHandRaise !== 'undefined' && switchGestureHandRaise) {
         gestureHandRaiseEnabled = Boolean(typeof lsSettings !== 'undefined' && lsSettings?.gesture_hand_raise);
-        switchGestureHandRaise.checked = gestureHandRaiseEnabled;
+        refreshGestureHandRaiseSwitches();
         switchGestureHandRaise.onchange = () => setGestureHandRaise(switchGestureHandRaise.checked);
     }
     switchAutoFraming.onchange = () => setCameraAutoFraming(switchAutoFraming.checked);
@@ -3267,12 +3272,25 @@ function setGestureHandRaise(enabled) {
         lsSettings.gesture_hand_raise = gestureHandRaiseEnabled;
         lS.setSettings(lsSettings);
     }
-    if (typeof switchGestureHandRaise !== 'undefined' && switchGestureHandRaise) {
-        switchGestureHandRaise.checked = gestureHandRaiseEnabled;
-    }
+    refreshGestureHandRaiseSwitches();
     if (typeof syncGestureHandRaise === 'function') {
         syncGestureHandRaise();
     }
+}
+
+// Quick switches in the Raise Hand and camera menus (desktop), the setting itself lives in Settings > Video
+function isGestureHandRaiseAvailable() {
+    return typeof HandGesture !== 'undefined' && !!useVideo && buttons.main.showVideoBtn && buttons.main.showMyHandBtn;
+}
+
+function refreshGestureHandRaiseSwitches() {
+    if (typeof switchGestureHandRaise !== 'undefined' && switchGestureHandRaise) {
+        switchGestureHandRaise.checked = gestureHandRaiseEnabled;
+    }
+    document.querySelectorAll('.gesture-hand-raise-switch').forEach((el) => {
+        el.checked = gestureHandRaiseEnabled;
+        el.closest('button')?.setAttribute('aria-pressed', String(gestureHandRaiseEnabled));
+    });
 }
 
 function syncGestureHandRaise() {
@@ -10241,6 +10259,11 @@ function setMyHandReactionsDropdown() {
     }
 
     myHandReactionsMenu.addEventListener('click', closeMenu);
+    // Keep the menu open while flipping the switch (stopPropagation skips the close above)
+    myHandGestureBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setGestureHandRaise(!gestureHandRaiseEnabled);
+    });
     document.addEventListener('click', (e) => {
         if (!myHandReactionsDropdown.contains(e.target)) closeMenu();
     });
@@ -11608,11 +11631,30 @@ async function documentPictureInPictureOpen() {
         pipVideoContainer.className = 'pipVideoContainer';
 
         pipWindow.document.head.append(pipStylesheet);
-        pipWindow.document.body.append(pipVideoContainer);
+
+        const fontAwesome = document.querySelector('link[href*="font-awesome"]');
+        if (fontAwesome) {
+            const pipFontAwesome = document.createElement('link');
+            pipFontAwesome.rel = 'stylesheet';
+            pipFontAwesome.href = fontAwesome.href;
+            pipWindow.document.head.append(pipFontAwesome);
+        }
+
+        const pipControls = createDocumentPipControls(pipWindow);
+
+        pipWindow.document.body.append(pipVideoContainer, pipControls.element);
+
+        let elementObservers = [];
+
+        function disconnectElementObservers() {
+            elementObservers.forEach((observer) => observer.disconnect());
+            elementObservers = [];
+        }
 
         function cloneVideoElements() {
             let foundVideo = false;
 
+            disconnectElementObservers();
             pipVideoContainer.innerHTML = '';
 
             [...getSlALL('video')].forEach((video) => {
@@ -11663,6 +11705,7 @@ async function documentPictureInPictureOpen() {
                     });
 
                     observer.observe(element, { attributes: true, attributeFilter: ['class'] });
+                    elementObservers.push(observer);
                     return observer;
                 }
 
@@ -11678,13 +11721,18 @@ async function documentPictureInPictureOpen() {
                 if (videoStatus) observeElementClassChanges(videoStatus, 'VideoStatus');
             });
 
+            // Keep the window open (the controls stay usable) and show a camera-off placeholder
+            if (!foundVideo) {
+                const noVideo = document.createElement('div');
+                noVideo.className = 'pipNoVideo';
+                noVideo.innerHTML = '<i class="fas fa-video-slash" aria-hidden="true"></i>';
+                pipVideoContainer.append(noVideo);
+            }
+
             return foundVideo;
         }
 
-        if (!cloneVideoElements()) {
-            documentPictureInPictureClose();
-            return userLog('toast', 'No video allowed for Document PIP');
-        }
+        cloneVideoElements();
 
         const videoObserver = new MutationObserver(() => {
             cloneVideoElements();
@@ -11705,10 +11753,133 @@ async function documentPictureInPictureOpen() {
         pipWindow.addEventListener('unload', () => {
             videoObserver.disconnect();
             documentObserver.disconnect();
+            disconnectElementObservers();
+            pipControls.destroy();
         });
     } catch (err) {
         userLog('warning', err.message, 6000);
     }
+}
+
+/**
+ * Create the Document PiP footer controls (mic, cam, raise hand, leave).
+ * Each PiP button proxies the matching bottom button, so all checks
+ * (media availability, push-to-talk, exit flow) stay in one place.
+ * @param {Window} pipWindow
+ * @returns {{ element: HTMLElement, destroy: Function }}
+ */
+function createDocumentPipControls(pipWindow) {
+    const pipDocument = pipWindow.document;
+
+    // Visible in the main toolbar (ignores the toolbar auto-hide on #bottomButtons itself)
+    const isShown = (el) => {
+        if (!el) return false;
+        for (let node = el; node && node !== bottomButtons; node = node.parentElement) {
+            if (getComputedStyle(node).display === 'none') return false;
+        }
+        return true;
+    };
+
+    const controls = [
+        {
+            id: 'pipAudioBtn',
+            target: audioBtn,
+            isOn: () => myAudioStatus,
+            onTitle: () => window.i18n?.t('Stop the audio', 'tooltips') ?? 'Stop the audio',
+            offTitle: () => window.i18n?.t('Start the audio', 'tooltips') ?? 'Start the audio',
+            offClass: 'muted',
+            pushToTalk: true,
+        },
+        {
+            id: 'pipVideoBtn',
+            target: videoBtn,
+            isOn: () => myVideoStatus,
+            onTitle: () => window.i18n?.t('Stop the video', 'tooltips') ?? 'Stop the video',
+            offTitle: () => window.i18n?.t('Start the video', 'tooltips') ?? 'Start the video',
+            offClass: 'muted',
+        },
+        {
+            id: 'pipHandBtn',
+            target: myHandBtn,
+            isOn: () => myHandStatus,
+            onTitle: () => window.i18n?.t('Lower your hand', 'tooltips') ?? 'Lower your hand',
+            offTitle: () => window.i18n?.t('Raise your hand', 'tooltips') ?? 'Raise your hand',
+            onClass: 'raised',
+        },
+        {
+            id: 'pipLeaveBtn',
+            target: leaveRoomBtn,
+            isOn: () => true,
+            onTitle: () => window.i18n?.t('Leave room', 'tooltips') ?? 'Leave room',
+            onClass: 'leave',
+            leave: true,
+        },
+    ];
+
+    const element = pipDocument.createElement('div');
+    element.className = 'pipControls';
+
+    controls.forEach((control) => {
+        const button = pipDocument.createElement('button');
+        button.id = control.id;
+        button.type = 'button';
+        button.className = 'pipControlButton';
+        button.append(pipDocument.createElement('i'));
+
+        button.addEventListener('click', () => {
+            if (control.leave) {
+                pipWindow.close();
+                window.focus();
+                return leaveRoom();
+            }
+            if (isShown(control.target) && !control.target.disabled) control.target.click();
+        });
+
+        if (control.pushToTalk) {
+            button.addEventListener('pointerdown', (e) => {
+                if (!isPushToTalkActive) return;
+                button.setPointerCapture(e.pointerId);
+                setPushToTalkPressed(true);
+            });
+            button.addEventListener('pointerup', () => setPushToTalkPressed(false));
+            button.addEventListener('pointercancel', () => setPushToTalkPressed(false));
+        }
+
+        control.button = button;
+        element.append(button);
+    });
+
+    const sync = () => {
+        controls.forEach((control) => {
+            const { button, target } = control;
+            button.hidden = !isShown(target);
+            if (button.hidden) return;
+
+            const isOn = !!control.isOn();
+            const title = isOn ? control.onTitle() : control.offTitle();
+
+            // Bottom buttons carry their Font Awesome icon classes directly
+            button.firstChild.className = [...target.classList].filter((name) => name.startsWith('fa')).join(' ');
+            button.disabled = !!target.disabled;
+            button.title = title;
+            button.setAttribute('aria-label', title);
+            if (control.onClass) button.classList.toggle(control.onClass, isOn);
+            if (control.offClass) button.classList.toggle(control.offClass, !isOn);
+        });
+    };
+
+    sync();
+
+    const observer = new MutationObserver(sync);
+    if (bottomButtons) {
+        observer.observe(bottomButtons, {
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['class', 'style', 'disabled'],
+        });
+    }
+
+    return { element, destroy: () => observer.disconnect() };
 }
 
 /**
@@ -23032,7 +23203,7 @@ function showAbout() {
     Swal.fire({
         background: swBg,
         position: 'center',
-        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.3.72',
+        title: brand.about?.title && brand.about.title.trim() !== '' ? brand.about.title : 'WebRTC P2P v2.3.75',
         imageUrl: brand.about?.imageUrl && brand.about.imageUrl.trim() !== '' ? brand.about.imageUrl : images.about,
         customClass: { image: 'img-about' },
         html: renderRoomTemplate('tpl-about-modal', {
@@ -24392,6 +24563,41 @@ function setupQuickDeviceSwitchDropdowns() {
         menuEl.appendChild(row);
     }
 
+    function appendGestureHandRaiseToggle(menuEl) {
+        if (!menuEl) return;
+
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'app-dropdown-action device-menu-toggle-btn';
+        row.setAttribute('aria-pressed', String(gestureHandRaiseEnabled));
+
+        const icon = document.createElement('i');
+        icon.className = 'fas fa-hand';
+
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'device-menu-label';
+        labelSpan.textContent = ` ${window.i18n?.t('Raise hand by gesture', 'labels') || 'Raise hand by gesture'}`;
+
+        const toggle = document.createElement('input');
+        toggle.id = 'videoMenuGestureHandRaise';
+        toggle.className = 'toggle gesture-hand-raise-switch';
+        toggle.type = 'checkbox';
+        toggle.checked = gestureHandRaiseEnabled;
+        toggle.style.pointerEvents = 'none';
+
+        row.appendChild(icon);
+        row.appendChild(labelSpan);
+        row.appendChild(toggle);
+
+        // Not rebuilt on change: setGestureHandRaise() syncs every .gesture-hand-raise-switch
+        row.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setGestureHandRaise(!gestureHandRaiseEnabled);
+        });
+
+        menuEl.appendChild(row);
+    }
+
     // The menus stay open after picking a device; actions that open another panel close them explicitly
     function hideDeviceMenu(toggleEl, menuEl) {
         closeMenu(toggleEl, menuEl);
@@ -24494,10 +24700,10 @@ function setupQuickDeviceSwitchDropdowns() {
         appendMenuHeader(videoMenu, 'fas fa-video', 'Cameras');
         appendSelectOptions(videoMenu, videoSelect, 'No cameras found', rebuildVideoMenu);
 
-        if (!autoFramingDiv.hidden) {
-            appendMenuDivider(videoMenu);
-            appendAutoFramingToggle(videoMenu);
-        }
+        const showGestureHandRaise = isGestureHandRaiseAvailable();
+        if (!autoFramingDiv.hidden || showGestureHandRaise) appendMenuDivider(videoMenu);
+        if (!autoFramingDiv.hidden) appendAutoFramingToggle(videoMenu);
+        if (showGestureHandRaise) appendGestureHandRaiseToggle(videoMenu);
 
         if (!backgroundEffectsSection.hidden) {
             appendMenuDivider(videoMenu);
