@@ -412,14 +412,12 @@ describe('mobile screen wake lock', () => {
         Object.assign(context, {
             localScreenDisplayStream: null,
             localScreenMediaStream: null,
-            screenShareAudioContext: null,
             isScreenStreaming: false,
             localAudioMediaStream: null,
             useAudio: false,
             getVideoTrack: () => track,
             getAudioTrack: () => null,
             hasAudioTrack: () => false,
-            mixScreenAndMicAudio: async () => null,
             getLocalScreenExtras: () => undefined,
             emitPeersAction() {},
             emitPeerStatus: async () => {},
@@ -427,6 +425,8 @@ describe('mobile screen wake lock', () => {
             refreshMyStreamToPeers: async () => {},
             getId: () => null,
             adaptAspectRatio() {},
+            localFileShare: null,
+            cleanupLocalFileShare() {},
             peerInfo: {},
             screenReaderAccessibility: { announceMessage() {} },
             MediaStream: function () {
